@@ -61,12 +61,15 @@ export default function Sidebar({
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col h-full z-10">
       {/* Brand Header */}
-      <div className="p-5 flex items-center justify-center border-b border-slate-800/60 bg-slate-950/20">
+      <div className="p-5 flex flex-col items-center justify-center border-b border-slate-800/60 bg-slate-950/20">
         <img 
           src="/logo2.jpg" 
           alt="Asepsis Logo" 
           className="h-12 w-auto object-contain max-w-full rounded-xl"
         />
+        <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-300 font-bold">
+          ISO-ASEPSIS
+        </p>
       </div>
 
       {/* Action Buttons */}

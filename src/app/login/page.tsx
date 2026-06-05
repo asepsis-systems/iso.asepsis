@@ -151,27 +151,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* User manual / accounts help card */}
-          <div className="mt-8 pt-6 border-t border-white/5">
-            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
-              Cuentas de Acceso de Prueba Ejemplos
-            </h4>
-            <div className="space-y-2 bg-slate-950/40 p-4 rounded-2xl border border-white/5 text-[11px] text-slate-400 leading-relaxed font-semibold">
-              <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                <span className="text-white">Admin (General):</span>
-                <span>admin / admin123</span>
-              </div>
-              <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                <span className="text-slate-300">Creador de Archivos:</span>
-                <span>creador / creador123</span>
-              </div>
-              <div className="flex justify-between items-center py-0.5">
-                <span className="text-slate-300">Verificadores (1, 2, 3):</span>
-                <span>verificador1 / verif123</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

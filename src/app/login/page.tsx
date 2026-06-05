@@ -61,7 +61,7 @@ export default function LoginPage() {
             alt="iso.asepsis logo" 
             className="h-20 w-auto mb-4 object-contain rounded-2xl border border-white/15 shadow-xl"
           />
-          <h1 className="text-2xl font-bold text-white tracking-tight">Acceso a iso.asepsis</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">T&CH Asepsis </h1>
           <p className="text-xs text-slate-400 mt-1.5 max-w-[280px]">
             Gestión inteligente de control de calidad y almacenamiento documental seguro.
           </p>
@@ -116,7 +116,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="block w-full pl-10 pr-11 bg-slate-950/60 border border-white/5 hover:border-white/10 focus:border-brand-500 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-4 focus:ring-brand-500/10 text-sm transition-all"
+                  className="block w-full pl-10 pr-11 py-3 bg-slate-950/60 border border-white/5 hover:border-white/10 focus:border-brand-500 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-4 focus:ring-brand-500/10 text-sm transition-all"
                   required
                 />
                 <button
@@ -152,7 +152,7 @@ export default function LoginPage() {
           {/* User manual / accounts help card */}
           <div className="mt-8 pt-6 border-t border-white/5">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
-              Cuentas de Acceso de Prueba
+              Cuentas de Acceso de Prueba Ejemplos
             </h4>
             <div className="space-y-2 bg-slate-950/40 p-4 rounded-2xl border border-white/5 text-[11px] text-slate-400 leading-relaxed font-semibold">
               <div className="flex justify-between items-center py-0.5 border-b border-white/5">

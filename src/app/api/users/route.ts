@@ -128,7 +128,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, name, password } = body;
+    const { id, username, name, password, role } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'El ID del usuario es obligatorio' }, { status: 400 });
@@ -147,8 +147,26 @@ export async function PUT(request: NextRequest) {
     if (name && name.trim()) {
       updateData.name = name.trim();
     }
+
+    if (username && username.trim()) {
+      const cleanUsername = username.trim().toLowerCase();
+      if (cleanUsername !== targetUser.username) {
+        const duplicateUser = await db.user.findUnique({
+          where: { username: cleanUsername },
+        });
+        if (duplicateUser) {
+          return NextResponse.json({ error: 'El nombre de usuario ya existe' }, { status: 400 });
+        }
+        updateData.username = cleanUsername;
+      }
+    }
+
     if (password && password.trim()) {
       updateData.password = hashPassword(password);
+    }
+
+    if (role) {
+      updateData.role = role.toUpperCase();
     }
 
     // If nothing to update, return success early

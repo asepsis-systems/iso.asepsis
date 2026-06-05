@@ -80,7 +80,9 @@ export default function Dashboard() {
   const [userError, setUserError] = useState('');
   const [editUserItem, setEditUserItem] = useState<UserItem | null>(null);
   const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState('CREATOR');
   const [editUserError, setEditUserError] = useState('');
   
   // Modals & Overlays
@@ -250,6 +252,10 @@ export default function Dashboard() {
       setEditUserError('El nombre completo es obligatorio.');
       return;
     }
+    if (!editUsername.trim()) {
+      setEditUserError('El nombre de usuario es obligatorio.');
+      return;
+    }
 
     try {
       const res = await fetch('/api/users', {
@@ -258,14 +264,18 @@ export default function Dashboard() {
         body: JSON.stringify({
           id: editUserItem.id,
           name: editName.trim(),
+          username: editUsername.trim().toLowerCase(),
           password: editPassword.trim() || undefined,
+          role: editRole,
         }),
       });
 
       const data = await res.json();
       if (res.ok) {
         setEditName('');
+        setEditUsername('');
         setEditPassword('');
+        setEditRole('CREATOR');
         setEditUserItem(null);
         loadUsers();
       } else {
@@ -778,6 +788,8 @@ export default function Dashboard() {
                             onClick={() => {
                               setEditUserItem(u);
                               setEditName(u.name);
+                              setEditUsername(u.username);
+                              setEditRole(u.role);
                               setEditPassword('');
                               setEditUserError('');
                             }}
@@ -1449,7 +1461,18 @@ export default function Dashboard() {
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Ej: Juan Pérez"
+                  placeholder="Ej: Alessandro Parodi"
+                  required
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Nombre de Usuario (Login)</label>
+                <input
+                  type="text"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  placeholder="Ej: alessandropa"
                   required
                   className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
                 />
@@ -1467,13 +1490,27 @@ export default function Dashboard() {
                   * Si no deseas cambiar la contraseña de este usuario, deja este campo vacío.
                 </p>
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Rol en el Sistema</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"
+                >
+                  <option value="CREATOR">Creador (Sube archivos)</option>
+                  <option value="VERIFIER">Verificador (Firma y aprueba)</option>
+                  <option value="ADMIN">Administrador (Gestión total)</option>
+                </select>
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => {
                     setEditUserItem(null);
                     setEditName('');
+                    setEditUsername('');
                     setEditPassword('');
+                    setEditRole('CREATOR');
                     setEditUserError('');
                   }}
                   className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-semibold transition-colors"

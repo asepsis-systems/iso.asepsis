@@ -1,0 +1,52 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Node {
+  id         String   @id @default(uuid())
+  name       String
+  type       String   // "FOLDER" or "FILE"
+  mimeType   String?  // e.g. application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  size       Int?     // Size in bytes (null for folders)
+  path       String?  // Server local storage path (null for folders)
+  isTrashed  Boolean  @default(false)
+  isStarred  Boolean  @default(false)
+  creator    String?  // Creador
+  verifier1  String?  // Verificador 1
+  verifier2  String?  // Verificador 2
+  verifier3  String?  // Verificador 3
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // Hierarchical relationship for nested folders
+  parentId   String?
+  parent     Node?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Node[]   @relation("FolderHierarchy")
+
+  @@index([parentId])
+}
+
+model User {
+  id        String    @id @default(uuid())
+  username  String    @unique
+  password  String    // Hashed password
+  name      String
+  role      String    // e.g. "CREATOR", "VERIFIER", "ADMIN"
+  sessions  Session[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+

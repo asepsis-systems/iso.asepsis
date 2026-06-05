@@ -19,7 +19,8 @@ import {
   Trash,
   RotateCcw,
   Edit3,
-  FileCheck
+  FileCheck,
+  Users
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
@@ -51,6 +52,14 @@ interface Breadcrumb {
   name: string;
 }
 
+interface UserItem {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  createdAt: string;
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<{ id: string; name: string; username: string; role: string } | null>(null);
@@ -60,6 +69,15 @@ export default function Dashboard() {
   const [currentFilter, setCurrentFilter] = useState<string>('all'); // 'all' | 'recent' | 'starred' | 'trash'
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+
+  // User Management
+  const [usersList, setUsersList] = useState<UserItem[]>([]);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('CREATOR');
+  const [userError, setUserError] = useState('');
   
   // Modals & Overlays
   const [isDragging, setIsDragging] = useState(false);
@@ -139,6 +157,86 @@ export default function Dashboard() {
     }
   };
 
+  // Fetch Users from SQLite DB (ADMIN only)
+  const loadUsers = async () => {
+    try {
+      const res = await fetch('/api/users');
+      const data = await res.json();
+      if (res.ok && data.users) {
+        setUsersList(data.users);
+      } else {
+        console.error('Error fetching users:', data.error);
+      }
+    } catch (error) {
+      console.error('Error al cargar usuarios:', error);
+    }
+  };
+
+  // Create new user (ADMIN only)
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserError('');
+    if (!newUsername.trim() || !newPassword.trim() || !newName.trim() || !newRole) {
+      setUserError('Todos los campos son obligatorios.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: newUsername.trim().toLowerCase(),
+          password: newPassword,
+          name: newName.trim(),
+          role: newRole,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setNewUsername('');
+        setNewPassword('');
+        setNewName('');
+        setNewRole('CREATOR');
+        setIsUserModalOpen(false);
+        loadUsers();
+      } else {
+        setUserError(data.error || 'Error al crear el usuario.');
+      }
+    } catch (err) {
+      console.error('Error al crear usuario:', err);
+      setUserError('Error de red al intentar crear el usuario.');
+    }
+  };
+
+  // Delete user (ADMIN only)
+  const handleDeleteUser = async (targetUser: UserItem) => {
+    if (!user) return;
+    if (targetUser.id === user.id) {
+      alert('No puedes eliminar tu propia cuenta de administrador activa.');
+      return;
+    }
+    if (!confirm(`¿Estás seguro de que deseas eliminar al usuario "${targetUser.name}" (${targetUser.username})?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/users?id=${targetUser.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        loadUsers();
+      } else {
+        alert(data.error || 'Error al eliminar el usuario.');
+      }
+    } catch (err) {
+      console.error('Error al eliminar usuario:', err);
+      alert('Error de red al intentar eliminar el usuario.');
+    }
+  };
+
   // Check active user authentication
   useEffect(() => {
     const checkAuth = async () => {
@@ -161,7 +259,11 @@ export default function Dashboard() {
   // Run initial fetch and re-fetch when filter, folder or search changes
   useEffect(() => {
     if (user) {
-      loadItems();
+      if (currentFilter === 'users') {
+        loadUsers();
+      } else {
+        loadItems();
+      }
     }
   }, [currentParentId, currentFilter, searchQuery, user]);
 
@@ -569,7 +671,8 @@ export default function Dashboard() {
           {/* Current view section header */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-800">
-              {currentFilter === 'recent' ? 'Archivos Recientes' : 
+              {currentFilter === 'users' ? 'Gestión de Usuarios' :
+               currentFilter === 'recent' ? 'Archivos Recientes' : 
                currentFilter === 'starred' ? 'Destacados' :
                currentFilter === 'trash' ? 'Papelera de Reciclaje' : 
                currentFilter === 'pending-my-signature' ? 'Documentos por Firmar' :
@@ -579,10 +682,77 @@ export default function Dashboard() {
                currentFilter === 'my-elaborated-approved' ? 'Mis Elaboraciones Aprobadas' :
                breadcrumbs.length > 0 ? breadcrumbs[breadcrumbs.length - 1].name : 'Mi Unidad'}
             </h2>
+            {currentFilter === 'users' && (
+              <button
+                onClick={() => setIsUserModalOpen(true)}
+                className="flex items-center gap-2 py-2 px-4 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-medium text-xs transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-brand-500/10 active:scale-[0.98]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nuevo Usuario</span>
+              </button>
+            )}
           </div>
 
           {/* Empty Folder / File Placeholder */}
-          {items.length === 0 ? (
+          {currentFilter === 'users' ? (
+            <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-premium">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                    <th className="p-4 w-12 text-center">Icono</th>
+                    <th className="p-4 text-slate-700 font-bold text-sm">Nombre Completo</th>
+                    <th className="p-4 text-slate-700 font-bold text-sm">Nombre de Usuario</th>
+                    <th className="p-4 w-32">Rol</th>
+                    <th className="p-4 w-40">Fecha de Creación</th>
+                    <th className="p-4 w-20 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usersList.map((u) => (
+                    <tr 
+                      key={u.id}
+                      className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors group"
+                    >
+                      <td className="p-4 flex justify-center">
+                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors">
+                          <Users className="w-4 h-4 text-brand-500" />
+                        </div>
+                      </td>
+                      <td className="p-4 font-bold text-slate-800 text-sm">{u.name}</td>
+                      <td className="p-4 text-slate-600 font-semibold">{u.username}</td>
+                      <td className="p-4">
+                        <span className={clsx(
+                          "px-2.5 py-1 rounded-full text-[10px] font-bold border inline-block",
+                          u.role === 'ADMIN' ? "bg-purple-50 text-purple-600 border-purple-200" :
+                          u.role === 'CREATOR' ? "bg-blue-50 text-blue-600 border-blue-200" :
+                          "bg-amber-50 text-amber-600 border-amber-200"
+                        )}>
+                          {u.role === 'ADMIN' ? 'Administrador' :
+                           u.role === 'CREATOR' ? 'Creador' : 'Verificador'}
+                        </span>
+                      </td>
+                      <td className="p-4 text-slate-400 font-semibold">{formatDate(u.createdAt)}</td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center">
+                          {user && u.id !== user.id ? (
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              className="p-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-xs border border-rose-100 flex items-center justify-center shrink-0"
+                              title="Eliminar usuario"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-semibold italic">Tú</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : items.length === 0 ? (
             <div className="h-[50vh] rounded-3xl border border-dashed border-slate-200/80 bg-white/40 backdrop-blur-xs flex flex-col items-center justify-center p-8 text-center">
               <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4 shadow-inner">
                 <Folder className="w-7 h-7" />
@@ -1205,6 +1375,89 @@ export default function Dashboard() {
           }
         }}
       />
+
+      {/* MODAL: Crear Usuario */}
+      {isUserModalOpen && (
+        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-6 w-full max-w-md">
+            <h3 className="font-bold text-slate-800 text-base mb-4">Crear Nuevo Usuario</h3>
+            {userError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-100 text-rose-600 rounded-xl text-xs font-semibold">
+                {userError}
+              </div>
+            )}
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Ej: Juan Pérez"
+                  required
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Nombre de Usuario (Login)</label>
+                <input
+                  type="text"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  placeholder="Ej: jperez"
+                  required
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Contraseña</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Contraseña segura"
+                  required
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Rol en el Sistema</label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"
+                >
+                  <option value="CREATOR">Creador (Sube archivos)</option>
+                  <option value="VERIFIER">Verificador (Firma y aprueba)</option>
+                  <option value="ADMIN">Administrador (Gestión total)</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserModalOpen(false);
+                    setUserError('');
+                    setNewName('');
+                    setNewUsername('');
+                    setNewPassword('');
+                    setNewRole('CREATOR');
+                  }}
+                  className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-colors"
+                >
+                  Crear Usuario
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

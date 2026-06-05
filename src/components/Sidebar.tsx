@@ -8,7 +8,8 @@ import {
   UploadCloud, 
   Database,
   FileCheck,
-  FileText
+  FileText,
+  Users
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -226,6 +227,32 @@ export default function Sidebar({
                 currentFilter === 'my-elaborated-approved' ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-400"
               )} />
               <span>Aprobados (3/3 Firmas)</span>
+            </button>
+          </div>
+        )}
+
+        {/* Navigation Group: Admin Flows */}
+        {user && user.role === 'ADMIN' && (
+          <div className="flex flex-col gap-1 border-t border-slate-800/40 pt-4">
+            <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Administración</p>
+            
+            <button
+              onClick={() => handleFilterClick('users')}
+              className={clsx(
+                "flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative",
+                currentFilter === 'users'
+                  ? "bg-slate-800 text-white shadow-sm border border-slate-700/30" 
+                  : "hover:bg-slate-800/40 text-slate-400 hover:text-slate-200"
+              )}
+            >
+              {currentFilter === 'users' && (
+                <span className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-brand-500 rounded-r" />
+              )}
+              <Users className={clsx(
+                "w-4 h-4 transition-colors",
+                currentFilter === 'users' ? "text-brand-400" : "text-slate-500 group-hover:text-slate-400"
+              )} />
+              <span>Gestión de Usuarios</span>
             </button>
           </div>
         )}

@@ -78,6 +78,10 @@ export default function Dashboard() {
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('CREATOR');
   const [userError, setUserError] = useState('');
+  const [editUserItem, setEditUserItem] = useState<UserItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editUserError, setEditUserError] = useState('');
   
   // Modals & Overlays
   const [isDragging, setIsDragging] = useState(false);
@@ -234,6 +238,42 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Error al eliminar usuario:', err);
       alert('Error de red al intentar eliminar el usuario.');
+    }
+  };
+
+  // Edit user (ADMIN only)
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditUserError('');
+    if (!editUserItem) return;
+    if (!editName.trim()) {
+      setEditUserError('El nombre completo es obligatorio.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editUserItem.id,
+          name: editName.trim(),
+          password: editPassword.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setEditName('');
+        setEditPassword('');
+        setEditUserItem(null);
+        loadUsers();
+      } else {
+        setEditUserError(data.error || 'Error al editar el usuario.');
+      }
+    } catch (err) {
+      console.error('Error al editar usuario:', err);
+      setEditUserError('Error de red al intentar editar el usuario.');
     }
   };
 
@@ -733,7 +773,20 @@ export default function Dashboard() {
                       </td>
                       <td className="p-4 text-slate-400 font-semibold">{formatDate(u.createdAt)}</td>
                       <td className="p-4 text-center">
-                        <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setEditUserItem(u);
+                              setEditName(u.name);
+                              setEditPassword('');
+                              setEditUserError('');
+                            }}
+                            className="p-1.5 rounded-xl bg-slate-50 text-slate-600 hover:bg-brand-500 hover:text-white transition-all shadow-xs border border-slate-200 flex items-center justify-center shrink-0"
+                            title="Editar usuario"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
                           {user && u.id !== user.id ? (
                             <button
                               onClick={() => handleDeleteUser(u)}
@@ -1375,6 +1428,69 @@ export default function Dashboard() {
           }
         }}
       />
+
+      {/* MODAL: Editar Usuario */}
+      {editUserItem && (
+        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-6 w-full max-w-md">
+            <h3 className="font-bold text-slate-800 text-base mb-2">Editar Usuario</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Editando la cuenta de: <span className="font-bold text-slate-700">{editUserItem.username}</span>
+            </p>
+            {editUserError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-100 text-rose-600 rounded-xl text-xs font-semibold">
+                {editUserError}
+              </div>
+            )}
+            <form onSubmit={handleEditUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Nombre Completo</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Ej: Juan Pérez"
+                  required
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Nueva Contraseña (Opcional)</label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Dejar en blanco para mantener la actual"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+                <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                  * Si no deseas cambiar la contraseña de este usuario, deja este campo vacío.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditUserItem(null);
+                    setEditName('');
+                    setEditPassword('');
+                    setEditUserError('');
+                  }}
+                  className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-colors"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Crear Usuario */}
       {isUserModalOpen && (

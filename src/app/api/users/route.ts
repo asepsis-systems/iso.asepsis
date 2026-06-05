@@ -118,3 +118,60 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Error al eliminar usuario: ' + error.message }, { status: 500 });
   }
 }
+
+// PUT /api/users - Update user (ADMIN only)
+export async function PUT(request: NextRequest) {
+  try {
+    const adminUser = await checkAdmin(request);
+    if (!adminUser) {
+      return NextResponse.json({ error: 'No autorizado. Solo los administradores pueden editar usuarios.' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { id, name, password } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'El ID del usuario es obligatorio' }, { status: 400 });
+    }
+
+    // Check if user exists
+    const targetUser = await db.user.findUnique({
+      where: { id },
+    });
+
+    if (!targetUser) {
+      return NextResponse.json({ error: 'El usuario no existe.' }, { status: 404 });
+    }
+
+    const updateData: any = {};
+    if (name && name.trim()) {
+      updateData.name = name.trim();
+    }
+    if (password && password.trim()) {
+      updateData.password = hashPassword(password);
+    }
+
+    // If nothing to update, return success early
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ success: true, message: 'No se realizaron cambios' });
+    }
+
+    const updatedUser = await db.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    return NextResponse.json({ success: true, user: updatedUser });
+  } catch (error: any) {
+    console.error('Error updating user:', error);
+    return NextResponse.json({ error: 'Error al editar usuario: ' + error.message }, { status: 500 });
+  }
+}
+

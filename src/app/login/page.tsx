@@ -57,9 +57,9 @@ export default function LoginPage() {
         {/* Logo and branding */}
         <div className="flex flex-col items-center mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-500">
           <img 
-            src="/logosinfondo.png" 
+            src="/logo2.jpg" 
             alt="iso.asepsis logo" 
-            className="h-20 w-auto mb-4 object-contain"
+            className="h-20 w-auto mb-4 object-contain rounded-2xl border border-white/15 shadow-xl"
           />
           <h1 className="text-2xl font-bold text-white tracking-tight">Acceso a iso.asepsis</h1>
           <p className="text-xs text-slate-400 mt-1.5 max-w-[280px]">

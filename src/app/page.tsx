@@ -20,8 +20,10 @@ import {
   RotateCcw,
   Edit3,
   FileCheck,
-  Users
+  Users,
+  Clock
 } from 'lucide-react';
+
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import UploadZone from '@/components/UploadZone';
@@ -69,6 +71,37 @@ export default function Dashboard() {
   const [currentFilter, setCurrentFilter] = useState<string>('all'); // 'all' | 'recent' | 'starred' | 'trash'
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const [creatorPendingCount, setCreatorPendingCount] = useState<number>(0);
+
+  const loadPendingCounts = async (currentUser?: typeof user) => {
+    const activeUser = currentUser || user;
+    if (!activeUser) return;
+
+    if (activeUser.role === 'VERIFIER' || activeUser.role === 'ADMIN') {
+      try {
+        const res = await fetch('/api/files?filter=pending-my-signature');
+        const data = await res.json();
+        if (data.items) {
+          setPendingCount(data.items.length);
+        }
+      } catch (error) {
+        console.error('Error al cargar conteo de pendientes:', error);
+      }
+    }
+
+    if (activeUser.role === 'CREATOR') {
+      try {
+        const res = await fetch('/api/files?filter=my-elaborated-pending');
+        const data = await res.json();
+        if (data.items) {
+          setCreatorPendingCount(data.items.length);
+        }
+      } catch (error) {
+        console.error('Error al cargar conteo de creador pendientes:', error);
+      }
+    }
+  };
 
   // User Management
   const [usersList, setUsersList] = useState<UserItem[]>([]);
@@ -158,6 +191,7 @@ export default function Dashboard() {
       } else {
         setBreadcrumbs([]);
       }
+      loadPendingCounts();
     } catch (error) {
       console.error('Error al cargar archivos:', error);
     }
@@ -314,6 +348,7 @@ export default function Dashboard() {
       } else {
         loadItems();
       }
+      loadPendingCounts(user);
     }
   }, [currentParentId, currentFilter, searchQuery, user]);
 
@@ -674,6 +709,8 @@ export default function Dashboard() {
         onNewFolder={() => setIsFolderModalOpen(true)}
         onUploadClick={() => fileInputRef.current?.click()}
         user={user}
+        pendingCount={pendingCount}
+        creatorPendingCount={creatorPendingCount}
       />
 
       {/* Main Container (Right) */}
@@ -715,6 +752,57 @@ export default function Dashboard() {
                   </button>
                 </React.Fragment>
               ))}
+            </div>
+          )}
+
+          {/* Pending signatures alert banner */}
+          {user && (user.role === 'VERIFIER' || user.role === 'ADMIN') && pendingCount > 0 && currentFilter !== 'pending-my-signature' && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent rounded-2xl border border-amber-500/25 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in backdrop-blur-xs">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center border border-amber-500/30 text-amber-500 shrink-0">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-amber-800">Tienes firmas pendientes</h4>
+                  <p className="text-xs text-amber-700/80 mt-0.5">
+                    Hay <strong>{pendingCount} {pendingCount === 1 ? 'documento que requiere' : 'documentos que requieren'}</strong> tu firma y aprobación en el sistema.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setCurrentFilter('pending-my-signature');
+                  setCurrentParentId(null);
+                }}
+                className="self-start sm:self-center px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-500/10 active:scale-95 shrink-0"
+              >
+                Ver pendientes →
+              </button>
+            </div>
+          )}
+
+          {user && user.role === 'CREATOR' && creatorPendingCount > 0 && currentFilter !== 'my-elaborated-pending' && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent rounded-2xl border border-blue-500/25 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in backdrop-blur-xs">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30 text-brand-400 shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-700">Documentos en proceso</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Tienes <strong>{creatorPendingCount} {creatorPendingCount === 1 ? 'documento' : 'documentos'}</strong> en proceso de firmas por parte de los verificadores.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setCurrentFilter('my-elaborated-pending');
+                  setCurrentParentId(null);
+                }}
+                className="self-start sm:self-center px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 shrink-0"
+              >
+                Ver estado →
+              </button>
             </div>
           )}
 

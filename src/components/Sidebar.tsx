@@ -21,6 +21,8 @@ interface SidebarProps {
   onNewFolder: () => void;
   onUploadClick: () => void;
   user: { id: string; name: string; username: string; role: string } | null;
+  pendingCount?: number;
+  creatorPendingCount?: number;
 }
 
 export default function Sidebar({
@@ -30,7 +32,9 @@ export default function Sidebar({
   totalStorageUsed,
   onNewFolder,
   onUploadClick,
-  user
+  user,
+  pendingCount = 0,
+  creatorPendingCount = 0
 }: SidebarProps) {
   
   const limitBytes = 100 * 1024 * 1024; // 100MB limit for demo
@@ -131,7 +135,7 @@ export default function Sidebar({
             <button
               onClick={() => handleFilterClick('pending-my-signature')}
               className={clsx(
-                "flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative",
+                "flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative w-full text-left",
                 currentFilter === 'pending-my-signature'
                   ? "bg-slate-800 text-white shadow-sm border border-slate-700/30" 
                   : "hover:bg-slate-800/40 text-slate-400 hover:text-slate-200"
@@ -141,10 +145,15 @@ export default function Sidebar({
                 <span className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-amber-500 rounded-r" />
               )}
               <Clock className={clsx(
-                "w-4 h-4 transition-colors",
+                "w-4 h-4 transition-colors shrink-0",
                 currentFilter === 'pending-my-signature' ? "text-amber-400" : "text-slate-500 group-hover:text-slate-400"
               )} />
-              <span>Por Firmar (Pendientes)</span>
+              <span className="truncate flex-1">Por Firmar (Pendientes)</span>
+              {pendingCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                  {pendingCount}
+                </span>
+              )}
             </button>
 
             <button
@@ -195,7 +204,7 @@ export default function Sidebar({
             <button
               onClick={() => handleFilterClick('my-elaborated-pending')}
               className={clsx(
-                "flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative",
+                "flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative w-full text-left",
                 currentFilter === 'my-elaborated-pending'
                   ? "bg-slate-800 text-white shadow-sm border border-slate-700/30" 
                   : "hover:bg-slate-800/40 text-slate-400 hover:text-slate-200"
@@ -205,10 +214,15 @@ export default function Sidebar({
                 <span className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-amber-500 rounded-r" />
               )}
               <Clock className={clsx(
-                "w-4 h-4 transition-colors",
+                "w-4 h-4 transition-colors shrink-0",
                 currentFilter === 'my-elaborated-pending' ? "text-amber-400" : "text-slate-500 group-hover:text-slate-400"
               )} />
-              <span>En Proceso</span>
+              <span className="truncate flex-1">En Proceso</span>
+              {creatorPendingCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                  {creatorPendingCount}
+                </span>
+              )}
             </button>
 
             <button

@@ -56,10 +56,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md z-10">
         {/* Logo and branding */}
         <div className="flex flex-col items-center mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center shadow-2xl shadow-brand-500/20 mb-4 border border-white/10 relative group">
-            <Database className="w-7 h-7 text-white transition-transform group-hover:scale-110 duration-300" />
-            <span className="absolute inset-0 rounded-2xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          </div>
+          <img 
+            src="/logosinfondo.png" 
+            alt="iso.asepsis logo" 
+            className="h-20 w-auto mb-4 object-contain"
+          />
           <h1 className="text-2xl font-bold text-white tracking-tight">Acceso a iso.asepsis</h1>
           <p className="text-xs text-slate-400 mt-1.5 max-w-[280px]">
             Gestión inteligente de control de calidad y almacenamiento documental seguro.

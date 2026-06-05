@@ -37,8 +37,9 @@ export async function GET(request: NextRequest) {
       } 
       else if (filter === 'pending-my-signature' && user) {
         whereClause.type = 'FILE';
-        whereClause.NOT = [
-          { creator: user.name }
+        whereClause.OR = [
+          { creator: null },
+          { NOT: { creator: user.name } }
         ];
         whereClause.AND = [
           // User has not signed verifier 1

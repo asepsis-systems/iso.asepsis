@@ -63,9 +63,9 @@ export default function Sidebar({
       {/* Brand Header */}
       <div className="p-5 flex items-center justify-center border-b border-slate-800/60 bg-slate-950/20">
         <img 
-          src="/logosinfondo.png" 
+          src="/logo2.jpg" 
           alt="Asepsis Logo" 
-          className="h-12 w-auto object-contain max-w-full"
+          className="h-12 w-auto object-contain max-w-full rounded-xl"
         />
       </div>
 

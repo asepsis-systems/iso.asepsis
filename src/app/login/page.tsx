@@ -61,7 +61,10 @@ export default function LoginPage() {
             alt="iso.asepsis logo" 
             className="h-20 w-auto mb-4 object-contain rounded-2xl border border-white/15 shadow-xl"
           />
-          <h1 className="text-2xl font-bold text-white tracking-tight">T&CH Asepsis </h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">T&CH Asepsis</h1>
+          <p className="text-xs uppercase tracking-[0.24em] text-brand-200 mt-2 mb-2">
+            ISO-ASEPSIS
+          </p>
           <p className="text-xs text-slate-400 mt-1.5 max-w-[280px]">
             Gestión inteligente de control de calidad y almacenamiento documental seguro.
           </p>

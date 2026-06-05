@@ -95,6 +95,7 @@ export default function Dashboard() {
     verifier2?: string | null;
     verifier3?: string | null;
     canSign: boolean;
+    canTrash: boolean;
   }>({
     isOpen: false,
     id: '',
@@ -106,7 +107,8 @@ export default function Dashboard() {
     verifier1: null,
     verifier2: null,
     verifier3: null,
-    canSign: false
+    canSign: false,
+    canTrash: false
   });
 
   // Fetch Items from SQLite DB
@@ -299,7 +301,8 @@ export default function Dashboard() {
         verifier1: item.verifier1 || null,
         verifier2: item.verifier2 || null,
         verifier3: item.verifier3 || null,
-        canSign: canUserSign(item)
+        canSign: canUserSign(item),
+        canTrash: !item.isTrashed && user !== null && (item.creator === user.name || user.role === 'ADMIN')
       });
     }
   };
@@ -619,6 +622,21 @@ export default function Dashboard() {
                             <FileCheck className="w-3.5 h-3.5" />
                           </button>
                         )}
+
+                        {!item.isTrashed && user && (item.creator === user.name || user.role === 'ADMIN') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('¿Estás seguro de que deseas mover este archivo a la papelera?')) {
+                                handleTrashToggle(item);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-xs border border-rose-100 flex items-center justify-center shrink-0"
+                            title="Mover a la papelera"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         
                         {/* Dropdown Menu trigger */}
                         <div className="relative">
@@ -845,6 +863,21 @@ export default function Dashboard() {
                               >
                                 <FileCheck className="w-3.5 h-3.5" />
                                 <span>Firmar</span>
+                              </button>
+                            )}
+
+                            {!item.isTrashed && user && (item.creator === user.name || user.role === 'ADMIN') && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm('¿Estás seguro de que deseas mover este archivo a la papelera?')) {
+                                    handleTrashToggle(item);
+                                  }
+                                }}
+                                className="p-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-xs border border-rose-100 flex items-center justify-center shrink-0"
+                                title="Mover a la papelera"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                             
@@ -1159,6 +1192,16 @@ export default function Dashboard() {
           const item = items.find(i => i.id === previewFile.id);
           if (item) {
             handleVerifyFile(item);
+          }
+        }}
+        canTrash={previewFile.canTrash}
+        onTrash={() => {
+          const item = items.find(i => i.id === previewFile.id);
+          if (item) {
+            if (confirm('¿Estás seguro de que deseas mover este archivo a la papelera?')) {
+              handleTrashToggle(item);
+              setPreviewFile(prev => ({ ...prev, isOpen: false }));
+            }
           }
         }}
       />

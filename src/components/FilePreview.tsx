@@ -9,7 +9,8 @@ import {
   ChevronRight,
   Eye,
   FileSpreadsheet,
-  FileCheck
+  FileCheck,
+  Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -26,6 +27,8 @@ interface FilePreviewProps {
   verifier3?: string | null;
   canSign?: boolean;
   onVerify?: () => void;
+  canTrash?: boolean;
+  onTrash?: () => void;
 }
 
 export default function FilePreview({
@@ -40,7 +43,9 @@ export default function FilePreview({
   verifier2,
   verifier3,
   canSign = false,
-  onVerify
+  onVerify,
+  canTrash = false,
+  onTrash
 }: FilePreviewProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
@@ -176,6 +181,16 @@ export default function FilePreview({
               >
                 <FileCheck className="w-4 h-4" />
                 <span>Firmar Documento</span>
+              </button>
+            )}
+
+            {canTrash && onTrash && (
+              <button
+                onClick={onTrash}
+                className="p-2 rounded-xl text-rose-500 hover:text-red-600 hover:bg-rose-50 transition-colors"
+                title="Mover a la papelera"
+              >
+                <Trash2 className="w-4.5 h-4.5" />
               </button>
             )}
 

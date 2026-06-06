@@ -72,7 +72,7 @@ export default function LoginPage() {
 
         {/* Login glassmorphism card */}
         <div className="bg-slate-900/70 border border-white/10 backdrop-blur-xl rounded-3xl p-8 shadow-2xl shadow-black/40 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             {/* Error display */}
             {error && (
               <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-in shake duration-300">
@@ -97,6 +97,7 @@ export default function LoginPage() {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="ejemplo_usuario"
                   className="block w-full pl-10 pr-4 py-3 bg-slate-950/60 border border-white/5 hover:border-white/10 focus:border-brand-500 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-4 focus:ring-brand-500/10 text-sm transition-all"
+                  autoComplete="one-time-code"
                   required
                 />
               </div>
@@ -120,6 +121,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="block w-full pl-10 pr-11 py-3 bg-slate-950/60 border border-white/5 hover:border-white/10 focus:border-brand-500 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:ring-4 focus:ring-brand-500/10 text-sm transition-all"
+                  autoComplete="new-password"
                   required
                 />
                 <button

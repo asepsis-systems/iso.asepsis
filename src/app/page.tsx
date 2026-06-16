@@ -1,5 +1,3 @@
-'use strict';
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -21,12 +19,12 @@ import {
   Edit3,
   FileCheck,
   Users,
-  Clock
+  Clock,
+  UploadCloud
 } from 'lucide-react';
 
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
-import UploadZone from '@/components/UploadZone';
 import FilePreview from '@/components/FilePreview';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
@@ -64,7 +62,7 @@ interface UserItem {
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<{ id: string; name: string; username: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; name: string; username: string; role: string; signature?: string | null } | null>(null);
   const [items, setItems] = useState<ItemNode[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
   const [currentParentId, setCurrentParentId] = useState<string | null>(null);
@@ -119,7 +117,6 @@ export default function Dashboard() {
   const [editUserError, setEditUserError] = useState('');
   
   // Modals & Overlays
-  const [isDragging, setIsDragging] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
@@ -151,6 +148,10 @@ export default function Dashboard() {
     verifier1?: string | null;
     verifier2?: string | null;
     verifier3?: string | null;
+    creatorSignature?: string | null;
+    verifier1Signature?: string | null;
+    verifier2Signature?: string | null;
+    verifier3Signature?: string | null;
     canSign: boolean;
     canTrash: boolean;
   }>({
@@ -164,9 +165,19 @@ export default function Dashboard() {
     verifier1: null,
     verifier2: null,
     verifier3: null,
+    creatorSignature: null,
+    verifier1Signature: null,
+    verifier2Signature: null,
+    verifier3Signature: null,
     canSign: false,
     canTrash: false
   });
+
+  // Profile modal states
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileSignatureFile, setProfileSignatureFile] = useState<File | null>(null);
+  const [profileUploadLoading, setProfileUploadLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
 
   // Fetch Items from SQLite DB
   const loadItems = async () => {
@@ -337,7 +348,18 @@ export default function Dashboard() {
         router.push('/login');
       }
     };
+
     checkAuth();
+
+    // Re-verify authentication on page navigation from BFcache (back/forward browser arrows)
+    const handlePageShow = (event: PageTransitionEvent) => {
+      checkAuth();
+    };
+
+    window.addEventListener('pageshow', handlePageShow);
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+    };
   }, [router]);
 
   // Run initial fetch and re-fetch when filter, folder or search changes
@@ -433,24 +455,6 @@ export default function Dashboard() {
     }
   };
 
-  // Drag and Drop events
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files) {
-      await handleFileUpload(e.dataTransfer.files);
-    }
-  };
-
   // Helper: Check if current user can sign the file
   const canUserSign = (item: ItemNode) => {
     if (!user || item.type !== 'FILE' || item.isTrashed) return false;
@@ -488,6 +492,10 @@ export default function Dashboard() {
         verifier1: item.verifier1 || null,
         verifier2: item.verifier2 || null,
         verifier3: item.verifier3 || null,
+        creatorSignature: (item as any).creatorSignature || null,
+        verifier1Signature: (item as any).verifier1Signature || null,
+        verifier2Signature: (item as any).verifier2Signature || null,
+        verifier3Signature: (item as any).verifier3Signature || null,
         canSign: canUserSign(item),
         canTrash: !item.isTrashed && user !== null && (item.creator === user.name || user.role === 'ADMIN')
       });
@@ -613,12 +621,12 @@ export default function Dashboard() {
   };
 
   // Helper: Request signature / verification
-  const handleVerifyFile = async (item: { id: string; path?: string }) => {
+  const handleVerifyFile = async (item: { id: string; path?: string }, placement?: any, annotations?: any[]) => {
     try {
       const res = await fetch('/api/files/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileId: item.id })
+        body: JSON.stringify({ fileId: item.id, placement, annotations })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -631,11 +639,18 @@ export default function Dashboard() {
       // If the preview modal is open for this file, update its verifiers and canSign flag!
       if (previewFile.isOpen && previewFile.id === item.id) {
         const updated = data.node;
+        const isV1 = updated.verifier1 === user?.name && !previewFile.verifier1;
+        const isV2 = updated.verifier2 === user?.name && !previewFile.verifier2;
+        const isV3 = updated.verifier3 === user?.name && !previewFile.verifier3;
+
         setPreviewFile(prev => ({
           ...prev,
           verifier1: updated.verifier1,
           verifier2: updated.verifier2,
           verifier3: updated.verifier3,
+          verifier1Signature: isV1 ? user?.signature : prev.verifier1Signature,
+          verifier2Signature: isV2 ? user?.signature : prev.verifier2Signature,
+          verifier3Signature: isV3 ? user?.signature : prev.verifier3Signature,
           canSign: false // Once signed, they cannot sign again!
         }));
       }
@@ -681,23 +696,31 @@ export default function Dashboard() {
     return <FileText className="w-8 h-8 text-slate-400 fill-slate-400/5" />;
   };
 
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center font-sans selection:bg-brand-500 selection:text-white relative overflow-hidden">
+        {/* Premium background effects */}
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] aspect-square rounded-full bg-gradient-to-tr from-brand-600/20 to-accent-teal/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] aspect-square rounded-full bg-gradient-to-br from-indigo-700/20 to-brand-950/30 blur-[100px] pointer-events-none" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-20 pointer-events-none" />
+
+        <div className="flex flex-col items-center gap-4 z-10 animate-in fade-in duration-500">
+          <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm font-semibold tracking-wider uppercase animate-pulse">Cargando Sistema...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div 
       className="h-full flex overflow-hidden bg-slate-50/50"
-      onDragEnter={handleDragEnter}
     >
       <input
         type="file"
         ref={fileInputRef}
         onChange={(e) => handleFileUpload(e.target.files)}
         className="hidden"
-      />
-
-      {/* Upload Zone Overlay */}
-      <UploadZone
-        isDragging={isDragging}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       />
 
       {/* Sidebar (Left) */}
@@ -724,6 +747,7 @@ export default function Dashboard() {
           setViewMode={setViewMode}
           user={user}
           onLogout={handleLogout}
+          onProfileClick={() => setIsProfileModalOpen(true)}
         />
 
         {/* Dynamic Dashboard Body */}
@@ -937,7 +961,7 @@ export default function Dashboard() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleVerifyFile(item);
+                              handleItemDoubleClick(item);
                             }}
                             className="p-1.5 rounded-lg bg-brand-50 text-brand-600 hover:bg-brand-500 hover:text-white transition-all shadow-xs border border-brand-100 flex items-center justify-center shrink-0"
                             title="Firmar / Verificar"
@@ -993,7 +1017,7 @@ export default function Dashboard() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleVerifyFile(item);
+                                    handleItemDoubleClick(item);
                                     setActiveMenuId(null);
                                   }}
                                   className="w-full text-left px-4 py-2 hover:bg-brand-50 hover:text-brand-600 text-brand-700 transition-colors flex items-center gap-2 border-b border-slate-100 font-bold"
@@ -1179,7 +1203,7 @@ export default function Dashboard() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleVerifyFile(item);
+                                  handleItemDoubleClick(item);
                                 }}
                                 className="px-2.5 py-1 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[10px] font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1 active:scale-95 shrink-0"
                                 title="Firmar / Verificar"
@@ -1235,7 +1259,7 @@ export default function Dashboard() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleVerifyFile(item);
+                                        handleItemDoubleClick(item);
                                         setActiveMenuId(null);
                                       }}
                                       className="w-full text-left px-4 py-2 hover:bg-brand-50 hover:text-brand-600 text-brand-700 transition-colors flex items-center gap-2 border-b border-slate-100 font-bold"
@@ -1510,11 +1534,46 @@ export default function Dashboard() {
         verifier1={previewFile.verifier1}
         verifier2={previewFile.verifier2}
         verifier3={previewFile.verifier3}
+        creatorSignature={previewFile.creatorSignature}
+        verifier1Signature={previewFile.verifier1Signature}
+        verifier2Signature={previewFile.verifier2Signature}
+        verifier3Signature={previewFile.verifier3Signature}
         canSign={previewFile.canSign}
-        onVerify={() => {
+        currentUserName={user?.name}
+        currentUserSignature={user?.signature}
+        onVerify={(placement, annotations) => {
           const item = items.find(i => i.id === previewFile.id);
           if (item) {
-            handleVerifyFile(item);
+            handleVerifyFile(item, placement, annotations);
+          }
+        }}
+        onRemoveVerify={async () => {
+          if (!confirm('¿Estás seguro de que deseas remover tu firma de este documento?')) return;
+          try {
+            const res = await fetch('/api/files/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fileId: previewFile.id, action: 'remove' })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              alert(data.error || 'Ocurrió un error al remover tu firma.');
+              return;
+            }
+            alert(data.message || 'Tu firma ha sido removida con éxito.');
+            loadItems();
+            
+            // Update previewFile state so the visual UI gets updated instantly
+            setPreviewFile(prev => ({
+              ...prev,
+              verifier1: data.node.verifier1,
+              verifier2: data.node.verifier2,
+              verifier3: data.node.verifier3,
+              canSign: true // Allow signing again
+            }));
+          } catch (err) {
+            console.error('Error al remover firma:', err);
+            alert('Error de red al intentar remover tu firma.');
           }
         }}
         canTrash={previewFile.canTrash}
@@ -1696,6 +1755,154 @@ export default function Dashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL: Configuración de Perfil / Firma Digital */}
+      {isProfileModalOpen && user && (
+        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 text-base">Mi Perfil y Firma Digital</h3>
+              <button 
+                onClick={() => {
+                  setIsProfileModalOpen(false);
+                  setProfileSignatureFile(null);
+                  setProfileError('');
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {profileError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-100 text-rose-600 rounded-xl text-xs font-semibold">
+                {profileError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* User Details */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2.5">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-400">Nombre Completo:</span>
+                  <span className="text-slate-800">{user.name}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-400">Nombre de Usuario:</span>
+                  <span className="text-slate-800 font-mono">{user.username}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-400">Rol asignado:</span>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-brand-50 text-brand-600 border-brand-200 uppercase">
+                    {user.role === 'ADMIN' ? 'Administrador' : user.role === 'CREATOR' ? 'Creador' : 'Verificador'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Signature Upload / Dropzone */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2">Imagen de tu Firma Digital</label>
+                
+                {user.signature && !profileSignatureFile && (
+                  <div className="mb-3 p-3 bg-white rounded-2xl border border-slate-200/60 shadow-inner flex flex-col items-center justify-center relative group">
+                    <img 
+                      src={user.signature} 
+                      alt="Tu firma digital" 
+                      className="max-h-16 object-contain mix-blend-multiply" 
+                    />
+                    <span className="text-[9px] text-slate-400 font-semibold mt-1">Firma activa</span>
+                  </div>
+                )}
+
+                <div className="border border-dashed border-slate-300 rounded-2xl p-4 text-center bg-slate-50/50 hover:bg-slate-50 transition-all cursor-pointer relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setProfileSignatureFile(e.target.files[0]);
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <div className="flex flex-col items-center justify-center gap-1.5">
+                    <UploadCloud className="w-8 h-8 text-slate-400" />
+                    {profileSignatureFile ? (
+                      <div>
+                        <p className="text-xs font-bold text-brand-600 truncate max-w-[200px]">{profileSignatureFile.name}</p>
+                        <p className="text-[9px] text-slate-400 font-semibold">({(profileSignatureFile.size / 1024).toFixed(1)} KB)</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs font-bold text-slate-600">Sube una nueva firma digital</p>
+                        <p className="text-[9px] text-slate-400 font-medium mt-0.5">PNG o JPG con fondo transparente</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileModalOpen(false);
+                    setProfileSignatureFile(null);
+                    setProfileError('');
+                  }}
+                  className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  disabled={!profileSignatureFile || profileUploadLoading}
+                  onClick={async () => {
+                    if (!profileSignatureFile) return;
+                    setProfileUploadLoading(true);
+                    setProfileError('');
+
+                    const formData = new FormData();
+                    formData.append('file', profileSignatureFile);
+
+                    try {
+                      const res = await fetch('/api/users/signature', {
+                        method: 'POST',
+                        body: formData
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        // Update local user state
+                        setUser(prev => prev ? { ...prev, signature: data.user.signature } : null);
+                        setProfileSignatureFile(null);
+                        alert('Firma digital actualizada con éxito.');
+                        // Reload items to enrich signatures in view
+                        loadItems();
+                      } else {
+                        setProfileError(data.error || 'Error al subir la firma.');
+                      }
+                    } catch (err) {
+                      console.error('Error uploading signature:', err);
+                      setProfileError('Error de red al subir la firma.');
+                    } finally {
+                      setProfileUploadLoading(false);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
+                >
+                  {profileUploadLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Subiendo...</span>
+                    </>
+                  ) : (
+                    <span>Guardar Firma</span>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

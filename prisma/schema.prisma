@@ -1,6 +1,6 @@
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -37,6 +37,7 @@ model User {
   password  String    // Hashed password
   name      String
   role      String    // e.g. "CREATOR", "VERIFIER", "ADMIN"
+  signature String?   // Path to digital signature image
   sessions  Session[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

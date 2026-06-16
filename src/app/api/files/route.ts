@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth-helpers';
+import fs from 'fs';
+import path from 'path';
 
 export async function GET(request: NextRequest) {
   try {
@@ -134,6 +136,29 @@ export async function GET(request: NextRequest) {
       orderBy: orderBy,
     });
 
+    // Fetch all users to map signatures by name
+    const users = await db.user.findMany({
+      select: { name: true, signature: true }
+    });
+
+    const signatureMap = new Map<string, string | null>();
+    users.forEach(u => {
+      if (u.name) {
+        signatureMap.set(u.name.trim().toLowerCase(), u.signature);
+      }
+    });
+
+    const enrichedItems = items.map((item: any) => {
+      if (item.type !== 'FILE') return item;
+      return {
+        ...item,
+        creatorSignature: item.creator ? signatureMap.get(item.creator.trim().toLowerCase()) || null : null,
+        verifier1Signature: item.verifier1 ? signatureMap.get(item.verifier1.trim().toLowerCase()) || null : null,
+        verifier2Signature: item.verifier2 ? signatureMap.get(item.verifier2.trim().toLowerCase()) || null : null,
+        verifier3Signature: item.verifier3 ? signatureMap.get(item.verifier3.trim().toLowerCase()) || null : null,
+      };
+    });
+
     // Also return current folder breadcrumbs if parentId is active
     let breadcrumbs: any[] = [];
     if (parentId && parentId !== 'root' && filter !== 'trash' && filter !== 'starred' && filter !== 'recent') {
@@ -152,7 +177,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ items, breadcrumbs });
+    return NextResponse.json({ items: enrichedItems, breadcrumbs });
   } catch (error: any) {
     console.error('Error fetching nodes:', error);
     return NextResponse.json({ error: 'Error al listar archivos: ' + error.message }, { status: 500 });
@@ -258,12 +283,20 @@ async function deleteFileFromDisk(node: any) {
   if (node.type === 'FILE') {
     const diskFileName = `${node.id}-${node.name}`;
     try {
-      const { error } = await supabase.storage.from('files').remove([diskFileName]);
-      if (error) {
-        console.error(`Error al eliminar archivo de Supabase Storage: ${diskFileName}`, error.message);
+      if (supabase) {
+        const { error } = await supabase.storage.from('files').remove([diskFileName]);
+        if (error) {
+          console.error(`Error al eliminar archivo de Supabase Storage: ${diskFileName}`, error.message);
+        }
+      } else {
+        const uploadDir = path.join(process.cwd(), 'uploads');
+        const filePath = path.join(uploadDir, diskFileName);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
       }
     } catch (err) {
-      console.error(`Error en la llamada a Supabase al eliminar: ${diskFileName}`, err);
+      console.error(`Error al eliminar archivo físico: ${diskFileName}`, err);
     }
   }
 }

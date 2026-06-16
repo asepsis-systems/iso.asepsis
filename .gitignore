@@ -9,3 +9,5 @@ uploads
 .next
 *.db
 *.db-journal
+*.tsbuildinfo
+public/signatures/*

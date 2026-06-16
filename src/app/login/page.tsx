@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Database, Lock, User as UserIcon, Eye, EyeOff, ShieldAlert, ArrowRight } from 'lucide-react';
 
@@ -11,6 +11,21 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        if (res.ok && data.authenticated) {
+          router.push('/');
+        }
+      } catch (err) {
+        console.error('Error al comprobar sesión:', err);
+      }
+    };
+    checkSession();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

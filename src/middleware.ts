@@ -6,6 +6,17 @@ import { verifyToken } from './lib/auth-helpers';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // If user is accessing /login, but they already have a session, redirect to /
+  if (pathname === '/login') {
+    const token = request.cookies.get('session_token')?.value;
+    if (token) {
+      const decoded = await verifyToken(token);
+      if (decoded) {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
+    }
+  }
+
   // Define public paths that don't require authentication
   const isPublicPath = 
     pathname === '/login' ||
@@ -46,7 +57,12 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  // Set Cache-Control headers to prevent caching of protected routes
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  response.headers.set('Pragma', 'no-cache');
+  response.headers.set('Expires', '0');
+  return response;
 }
 
 // Apply middleware to all routes except standard static directories

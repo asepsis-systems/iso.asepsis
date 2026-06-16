@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
         username: true,
         name: true,
         role: true,
+        signature: true,
         createdAt: true,
       },
       orderBy: {
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
         username: true,
         name: true,
         role: true,
+        signature: true,
         createdAt: true,
       },
     });
@@ -128,7 +130,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, username, name, password, role } = body;
+    const { id, username, name, password, role, signature } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'El ID del usuario es obligatorio' }, { status: 400 });
@@ -169,6 +171,10 @@ export async function PUT(request: NextRequest) {
       updateData.role = role.toUpperCase();
     }
 
+    if (signature !== undefined) {
+      updateData.signature = signature;
+    }
+
     // If nothing to update, return success early
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ success: true, message: 'No se realizaron cambios' });
@@ -182,6 +188,7 @@ export async function PUT(request: NextRequest) {
         username: true,
         name: true,
         role: true,
+        signature: true,
         createdAt: true,
       },
     });

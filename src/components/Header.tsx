@@ -7,8 +7,9 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   viewMode: 'grid' | 'list';
   setViewMode: (mode: 'grid' | 'list') => void;
-  user: { id: string; name: string; username: string; role: string } | null;
+  user: { id: string; name: string; username: string; role: string; signature?: string | null } | null;
   onLogout: () => void;
+  onProfileClick?: () => void;
 }
 
 export default function Header({
@@ -17,7 +18,8 @@ export default function Header({
   viewMode,
   setViewMode,
   user,
-  onLogout
+  onLogout,
+  onProfileClick
 }: HeaderProps) {
   
   const getInitials = (name?: string) => {
@@ -86,12 +88,13 @@ export default function Header({
               <span>Conexión Segura</span>
             </span>
           </div>
-          <div 
-            className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-100 to-brand-200 flex items-center justify-center border border-brand-200/40 text-brand-700 font-bold text-sm shadow-sm select-none"
-            title={user ? `${user.name} (${user.role})` : ''}
+          <button 
+            onClick={onProfileClick}
+            className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-100 to-brand-200 flex items-center justify-center border border-brand-200/40 text-brand-700 font-bold text-sm shadow-sm hover:shadow hover:scale-105 active:scale-95 transition-all select-none"
+            title={user ? `${user.name} (${user.role}) - Ver Perfil` : ''}
           >
             {getInitials(user?.name)}
-          </div>
+          </button>
 
           {/* Logout button */}
           <button

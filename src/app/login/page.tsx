@@ -13,18 +13,20 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const checkSession = async () => {
+    const checkAndClearSession = async () => {
       try {
         const res = await fetch('/api/auth/me');
         const data = await res.json();
         if (res.ok && data.authenticated) {
-          router.push('/');
+          // If they land on the login page but have an active session (e.g. by pressing back button), automatically log them out
+          await fetch('/api/auth/logout', { method: 'POST' });
+          router.refresh();
         }
       } catch (err) {
-        console.error('Error al comprobar sesión:', err);
+        console.error('Error al comprobar/cerrar sesión:', err);
       }
     };
-    checkSession();
+    checkAndClearSession();
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {

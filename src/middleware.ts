@@ -6,14 +6,19 @@ import { verifyToken } from './lib/auth-helpers';
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // If user is accessing /login, but they already have a session, redirect to /
+  // If user is accessing /login, but they have a session, clear the session for security (e.g. back navigation)
   if (pathname === '/login') {
     const token = request.cookies.get('session_token')?.value;
     if (token) {
-      const decoded = await verifyToken(token);
-      if (decoded) {
-        return NextResponse.redirect(new URL('/', request.url));
-      }
+      const response = NextResponse.next();
+      response.cookies.set({
+        name: 'session_token',
+        value: '',
+        httpOnly: true,
+        path: '/',
+        expires: new Date(0)
+      });
+      return response;
     }
   }
 

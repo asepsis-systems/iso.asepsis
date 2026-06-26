@@ -15,7 +15,9 @@ import {
   MessageSquareMore,
   Pencil,
   Highlighter,
-  Type
+  Type,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import clsx from 'clsx';
@@ -49,6 +51,8 @@ interface FilePreviewProps {
   canSign?: boolean;
   onVerify?: (placement?: { page: string; pageNumber?: number; x: number; y: number }, annotations?: Annotation[]) => void;
   onRemoveVerify?: () => void;
+  onReject?: () => void;
+  isApproved?: boolean;
   canTrash?: boolean;
   onTrash?: () => void;
   currentUserName?: string | null;
@@ -69,6 +73,8 @@ interface PdfPageProps {
   onPlace: (x: number, y: number) => void;
   signatureUrl: string | null;
   canSign: boolean;
+  zoom: number;
+  sigScale: number;
 }
 
 function PdfPage({ 
@@ -83,7 +89,9 @@ function PdfPage({
   placedY, 
   onPlace, 
   signatureUrl,
-  canSign
+  canSign,
+  zoom,
+  sigScale
 }: PdfPageProps) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -100,9 +108,9 @@ function PdfPage({
       setLoading(true);
       pdfDoc.getPage(pageNum).then((page: any) => {
         if (!active) return;
-        const viewport = page.getViewport({ scale: 1.5 });
+        const viewport = page.getViewport({ scale: zoom });
         if (active) {
-          setPageSize({ width: viewport.width / 1.5, height: viewport.height / 1.5 });
+          setPageSize({ width: viewport.width / zoom, height: viewport.height / zoom });
         }
         const canvas = canvasRef.current;
         if (canvas) {
@@ -134,7 +142,7 @@ function PdfPage({
     return () => {
       active = false;
     };
-  }, [pdfDoc, pageNum]);
+  }, [pdfDoc, pageNum, zoom]);
 
   // Redraw annotations on the overlay canvas
   const drawAnnotations = () => {
@@ -206,11 +214,11 @@ function PdfPage({
   useEffect(() => {
     if (isPlacing && pageSize && overlayCanvasRef.current) {
       const canvas = overlayCanvasRef.current;
-      canvas.width = pageSize.width * 1.5;
-      canvas.height = pageSize.height * 1.5;
+      canvas.width = pageSize.width * zoom;
+      canvas.height = pageSize.height * zoom;
       drawAnnotations();
     }
-  }, [pageSize, isPlacing]);
+  }, [pageSize, isPlacing, zoom]);
 
   const getCoordinatesFromEvent = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = overlayCanvasRef.current;
@@ -303,8 +311,8 @@ function PdfPage({
       const x = ((moveEvent.clientX - rect.left) / rect.width) * 100;
       const y = ((moveEvent.clientY - rect.top) / rect.height) * 100;
       
-      const halfW = (50 / pageSize.width) * 100;
-      const halfH = (30 / pageSize.height) * 100;
+      const halfW = ((50 * (sigScale / 100)) / pageSize.width) * 100;
+      const halfH = ((30 * (sigScale / 100)) / pageSize.height) * 100;
       
       const clampedX = Math.max(halfW, Math.min(x, 100 - halfW));
       const clampedY = Math.max(halfH, Math.min(y, 100 - halfH));
@@ -320,7 +328,7 @@ function PdfPage({
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
-
+ 
   const handleSignatureTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!canSign) return;
     e.stopPropagation();
@@ -338,8 +346,8 @@ function PdfPage({
       const x = ((clientX - rect.left) / rect.width) * 100;
       const y = ((clientY - rect.top) / rect.height) * 100;
       
-      const halfW = (50 / pageSize.width) * 100;
-      const halfH = (30 / pageSize.height) * 100;
+      const halfW = ((50 * (sigScale / 100)) / pageSize.width) * 100;
+      const halfH = ((30 * (sigScale / 100)) / pageSize.height) * 100;
       
       const clampedX = Math.max(halfW, Math.min(x, 100 - halfW));
       const clampedY = Math.max(halfH, Math.min(y, 100 - halfH));
@@ -355,9 +363,9 @@ function PdfPage({
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd);
   };
-
+ 
   return (
-    <div className="relative mx-auto my-4 bg-white shadow-lg border border-slate-200/60 rounded-2xl overflow-hidden select-none" style={{ maxWidth: '612px', width: '100%' }}>
+    <div className="relative mx-auto my-4 bg-white shadow-lg border border-slate-200/60 rounded-2xl overflow-hidden select-none" style={{ maxWidth: `${408 * zoom}px`, width: '100%' }}>
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/70 z-10 min-h-[400px]">
           <div className="w-8 h-8 border-3 border-brand-500 border-t-transparent rounded-full animate-spin" />
@@ -518,8 +526,8 @@ function PdfPage({
               style={{
                 left: `${placedX}%`,
                 top: `${placedY}%`,
-                width: pageSize ? `${(100 / pageSize.width) * 100}%` : '16.3%',
-                height: pageSize ? `${(60 / pageSize.height) * 100}%` : '7.6%',
+                width: pageSize ? `${((100 * (sigScale / 100)) / pageSize.width) * 100}%` : `${16.3 * (sigScale / 100)}%`,
+                height: pageSize ? `${((60 * (sigScale / 100)) / pageSize.height) * 100}%` : `${7.6 * (sigScale / 100)}%`,
                 transform: 'translate(-50%, -50%)'
               }}
               onMouseDown={canSign ? handleSignatureMouseDown : undefined}
@@ -560,6 +568,8 @@ export default function FilePreview({
   canSign = false,
   onVerify,
   onRemoveVerify,
+  onReject,
+  isApproved = false,
   canTrash = false,
   onTrash,
   currentUserName = '',
@@ -569,6 +579,9 @@ export default function FilePreview({
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
   const [currentSheet, setCurrentSheet] = useState<string>('');
   const [excelData, setExcelData] = useState<any[][]>([]);
+  const [zoom, setZoom] = useState(1.5);
+  const [sigScale, setSigScale] = useState(100);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
 
   const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
   const isPDF = mimeType === 'application/pdf' || fileExtension === 'pdf';
@@ -596,6 +609,9 @@ export default function FilePreview({
     if (isOpen) {
       setAnnotations([]);
       setActiveTool('signature');
+      setZoom(1.5);
+      setSigScale(100);
+      setShowDownloadOptions(false);
       if (isPDF && canSign) {
         setIsPlacingSignature(true);
       } else {
@@ -807,6 +823,17 @@ export default function FilePreview({
               </button>
             )}
 
+            {canSign && onReject && !isPlacingSignature && (
+              <button
+                onClick={onReject}
+                className="mr-2 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 active:scale-95"
+                title="Rechazar este documento"
+              >
+                <X className="w-4 h-4" />
+                <span>Rechazar</span>
+              </button>
+            )}
+
             {hasUserSigned && onRemoveVerify && (
               <button
                 onClick={onRemoveVerify}
@@ -828,15 +855,51 @@ export default function FilePreview({
               </button>
             )}
 
+            {/* Zoom controls */}
+            {isPDF && (
+              <div className="flex items-center gap-1 bg-slate-200/60 rounded-xl p-0.5 mr-2">
+                <button
+                  type="button"
+                  onClick={() => setZoom(prev => Math.max(1.0, prev - 0.25))}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white transition-colors"
+                  title="Alejar (Zoom Out)"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="text-[10px] font-bold text-slate-600 px-1 select-none">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setZoom(prev => Math.min(2.5, prev + 0.25))}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white transition-colors"
+                  title="Acercar (Zoom In)"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Download file button */}
-            <a
-              href={fileUrl}
-              download={fileName}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-colors"
-              title="Descargar archivo"
-            >
-              <Download className="w-4.5 h-4.5" />
-            </a>
+            {(isPDF || isWord) ? (
+              <button
+                type="button"
+                onClick={() => setShowDownloadOptions(true)}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-colors"
+                title="Opciones de descarga"
+              >
+                <Download className="w-4.5 h-4.5" />
+              </button>
+            ) : (
+              <a
+                href={fileUrl}
+                download={fileName}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition-colors"
+                title="Descargar archivo"
+              >
+                <Download className="w-4.5 h-4.5" />
+              </a>
+            )}
 
             {/* Fullscreen toggle button */}
             <button
@@ -1034,29 +1097,45 @@ export default function FilePreview({
                         {canSign && activeTool === 'signature' && (
                           <div className="pt-2">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Posición Rápida</span>
-                            <div className="grid grid-cols-3 gap-1.5">
+                            <div className="grid grid-cols-3 gap-1.5 font-semibold">
                               <button 
                                 type="button"
                                 onClick={() => { setPosX(15); setPosY(82); }}
-                                className="px-2 py-1.5 rounded-lg border border-slate-200 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
+                                className="px-2 py-1.5 rounded-lg border border-slate-200 text-[10px] text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
                               >
                                 Izq.
                               </button>
                               <button 
                                 type="button"
                                 onClick={() => { setPosX(45); setPosY(82); }}
-                                className="px-2 py-1.5 rounded-lg border border-slate-200 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
+                                className="px-2 py-1.5 rounded-lg border border-slate-200 text-[10px] text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
                               >
                                 Centro
                               </button>
                               <button 
                                 type="button"
                                 onClick={() => { setPosX(75); setPosY(82); }}
-                                className="px-2 py-1.5 rounded-lg border border-brand-200 bg-brand-50/20 text-[10px] font-semibold text-brand-700 hover:bg-brand-50 active:scale-95 transition-all"
+                                className="px-2 py-1.5 rounded-lg border border-brand-200 bg-brand-50/20 text-[10px] text-brand-700 hover:bg-brand-50 active:scale-95 transition-all"
                               >
                                 Der.
                               </button>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Signature Scale slider */}
+                        {canSign && activeTool === 'signature' && (
+                          <div className="pt-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Tamaño de Firma ({sigScale}%)</span>
+                            <input 
+                              type="range" 
+                              min="30" 
+                              max="200" 
+                              step="5"
+                              value={sigScale} 
+                              onChange={(e) => setSigScale(Number(e.target.value))}
+                              className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                            />
                           </div>
                         )}
 
@@ -1190,6 +1269,8 @@ export default function FilePreview({
                         }}
                         signatureUrl={currentUserSignature}
                         canSign={canSign}
+                        zoom={zoom}
+                        sigScale={sigScale}
                       />
                     ))}
                   </div>
@@ -1345,14 +1426,14 @@ export default function FilePreview({
                           </p>
                         </div>
                       </div>
-                      <a
-                        href={fileUrl}
-                        download={fileName}
+                      <button
+                        type="button"
+                        onClick={() => setShowDownloadOptions(true)}
                         className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Descargar Word</span>
-                      </a>
+                      </button>
                     </div>
                   </div>
 
@@ -1389,6 +1470,114 @@ export default function FilePreview({
         </div>
 
       </div>
+
+      {/* DOWNLOAD OPTIONS MODAL */}
+      {showDownloadOptions && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-6 w-full max-w-md animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="font-bold text-slate-800 text-sm">Opciones de Descarga</h3>
+              <button 
+                onClick={() => setShowDownloadOptions(false)} 
+                className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed font-semibold">
+              Elige una de las siguientes opciones para descargar el documento:
+            </p>
+
+            <div className="space-y-3">
+              {/* If it is a PDF file, always show 3 options */}
+              {isPDF && (
+                <>
+                  {/* Option 1: Signed Document (no certificate) */}
+                  <a
+                    href={`${fileUrl}&option=1`}
+                    onClick={() => setShowDownloadOptions(false)}
+                    className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-brand-500 hover:bg-brand-50/10 transition-all group"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 group-hover:bg-brand-100">
+                      <FileCheck className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-xs font-bold text-slate-700 group-hover:text-brand-700">Descargar documento firmado</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed font-medium">
+                        Descarga el documento firmado en su estado actual (no incluye el certificado de firmas).
+                      </p>
+                    </div>
+                  </a>
+
+                  {/* Option 2: Certificate of signatures */}
+                  <a
+                    href={`${fileUrl}&option=4`}
+                    onClick={() => setShowDownloadOptions(false)}
+                    className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-brand-500 hover:bg-brand-50/10 transition-all group"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:bg-amber-100">
+                      <Eye className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                      <h4 className="text-xs font-bold text-slate-700 group-hover:text-brand-700">Descargar Certificado de firmas</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed font-medium">
+                        Descarga únicamente las páginas del certificado de trazabilidad y auditoría de firmas.
+                      </p>
+                    </div>
+                  </a>
+                </>
+              )}
+
+              {/* If it is a Word document */}
+              {isWord && (
+                <a
+                  href={fileUrl}
+                  onClick={() => setShowDownloadOptions(false)}
+                  className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-brand-500 hover:bg-brand-50/10 transition-all group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 group-hover:bg-brand-100">
+                    <FileCheck className="w-5 h-5" />
+                  </div>
+                  <div className="text-left">
+                    <h4 className="text-xs font-bold text-slate-700 group-hover:text-brand-700">Descargar documento firmado</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed font-medium">
+                      Descarga el documento de Word con las firmas registradas.
+                    </p>
+                  </div>
+                </a>
+              )}
+
+              {/* Option 3 (or 2 for Word): Original Unsigned Document - Always available for PDFs and Word docs */}
+              <a
+                href={`${fileUrl}&original=true`}
+                onClick={() => setShowDownloadOptions(false)}
+                className="flex items-start gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-brand-500 hover:bg-brand-50/10 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 group-hover:bg-slate-200">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-xs font-bold text-slate-700 group-hover:text-brand-700">Descargar documento original (sin firmas)</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed font-medium">
+                    Descarga el documento limpio, tal como fue subido inicialmente, sin ninguna firma o sello.
+                  </p>
+                </div>
+              </a>
+            </div>
+
+            <div className="flex justify-end mt-5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowDownloadOptions(false)}
+                className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-bold transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

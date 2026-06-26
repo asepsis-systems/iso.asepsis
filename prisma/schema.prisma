@@ -28,6 +28,10 @@ model Node {
   parent     Node?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children   Node[]   @relation("FolderHierarchy")
 
+  // Relaciones del módulo de áreas
+  areaFolder Area?     @relation("AreaFolderNode")
+  document   Document? @relation("DocumentNode")
+
   @@index([parentId])
 }
 
@@ -38,9 +42,21 @@ model User {
   name      String
   role      String    // e.g. "CREATOR", "VERIFIER", "ADMIN"
   signature String?   // Path to digital signature image
+  cargo     String?   // Cargo de la persona
+  email     String?   // Correo electrónico
   sessions  Session[]
+  
+  // Relaciones del módulo de áreas
+  areaId     String?
+  area       Area?       @relation("UserArea", fields: [areaId], references: [id])
+  verifiers  Verifier[]
+  documents  Document[]  @relation("CreatorRelation")
+  signatures Signature[]
+  
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  @@index([areaId])
 }
 
 model Session {
@@ -50,4 +66,203 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
+
+model Area {
+  id           String     @id @default(uuid())
+  name         String     @unique // "Operaciones" | "Administración" | "Mantenimiento" | "Logística"
+  color        String?    // color per area (p.ej. "blue", "purple", "emerald", "amber")
+  folderNodeId String?    @unique // Link to the folder Node in explorer
+  folderNode   Node?      @relation("AreaFolderNode", fields: [folderNodeId], references: [id])
+  users        User[]     @relation("UserArea")
+  verifiers    Verifier[]
+  documents    Document[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([folderNodeId])
+}
+
+model Verifier {
+  id        String   @id @default(uuid())
+  areaId    String
+  area      Area     @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  signOrder Int      // orden de firma (1, 2, 3)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([areaId, userId])
+  @@index([areaId])
+  @@index([userId])
+}
+
+model Document {
+  id         String      @id @default(uuid())
+  areaId     String
+  area       Area        @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  nodeId     String?     @unique // Link to the Node table
+  node       Node?       @relation("DocumentNode", fields: [nodeId], references: [id], onDelete: Cascade)
+  status     String      // "PENDIENTE" | "EN_PROCESO" | "APROBADO" | "RECHAZADO"
+  creatorId  String
+  creator    User        @relation("CreatorRelation", fields: [creatorId], references: [id], onDelete: Cascade)
+  signatures Signature[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([areaId])
+  @@index([creatorId])
+  @@index([nodeId])
+}
+
+model Signature {
+  id         String    @id @default(uuid())
+  documentId String
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     String    // "PENDIENTE" | "APROBADO" | "RECHAZADO"
+  signedAt   DateTime? // fecha y hora de la firma
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // NEW fields for traceability
+  pageNumber Int?
+  coordX     Float?
+  coordY     Float?
+  ipAddress  String?
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
+}
+
+model Audit {
+  id        String   @id @default(uuid())
+  username  String
+  action    String
+  detail    String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+// ==========================================
+// MODELS FROM MAINTENANCE APP (mantenimiento)
+// To prevent Prisma from dropping them on db push
+// ==========================================
+
+model MaintUser {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String   // Hashed password
+  name      String
+  role      String   // "ADMIN" | "CREATOR" | "VIEWER"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  title       String   // e.g. "Reporte semanal de mantenimiento"
+  periodFrom  String   // e.g. "12/06/26"
+  periodTo    String   // e.g. "20/06/26"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       Item[]
+}
+
+model Item {
+  id          String    @id @default(uuid())
+  reportId    String
+  report      Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  itemNumber  Int       // 1, 2, 3
+  date        String    // "15.06.26"
+  responsable String    // "PROMAQUIRSA"
+  machines    Machine[]
+
+  @@index([reportId])
+}
+
+model Machine {
+  id     String @id @default(uuid())
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  name   String // "Ablandador"
+  tasks  Task[]
+
+  @@index([itemId])
+}
+
+model Task {
+  id          String  @id @default(uuid())
+  machineId   String
+  machine     Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  falla       String  // "No Succiona la sal"
+  tipo        String  // "correctivo"
+  descripcion String  // "Limpieza de filtro de succion"
+  repuestos   String  // "oring (tych)"
+  cantidad    String  // "1"
+  estado      String  // "completado" | "proceso" | "pendiente"
+
+  @@index([machineId])
+}
+
+model Tarea {
+  id                  String   @id @default(uuid())
+  responsable         String
+  descripcion         String   @db.Text
+  estado              String   @default("PENDIENTE") // "HECHO" | "PENDIENTE"
+  fecha_creacion      DateTime @default(now())
+  fecha_actualizacion DateTime @updatedAt
+
+  @@map("Tarea")
+}
+
+model Responsable {
+  id        String   @id @default(uuid())
+  nombre    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("Responsable")
+}
+
+model SparePart {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  stock       Int      @default(0)
+  minStock    Int      @default(0)
+  price       Float?
+  location    String?  // Storage shelf/bin
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model License {
+  id            String   @id @default(uuid())
+  name          String
+  entity        String   // Issuing entity (e.g. SUSALUD, Diresa)
+  code          String?  // License number/code
+  issueDate     String
+  expiryDate    String
+  status        String   // "VIGENTE" | "VENCIDO" | "EN_TRAMITE"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  archivoNombre String?
+  archivoPath   String?
+  carpetaId     String?
+  carpeta       LicenciaCarpeta? @relation("FolderLicenses", fields: [carpetaId], references: [id], onDelete: SetNull)
+
+  @@index([carpetaId])
+}
+
+model LicenciaCarpeta {
+  id        String    @id @default(uuid())
+  nombre    String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  licenses  License[] @relation("FolderLicenses")
+}
+
 

@@ -69,6 +69,7 @@ export default function Sidebar({
         <img 
           src="/logo2.jpg" 
           alt="Asepsis Logo" 
+          style={{ height: '48px', width: 'auto' }}
           className="h-12 w-auto object-contain max-w-full rounded-xl"
         />
         <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-300 font-bold">
@@ -268,6 +269,25 @@ export default function Sidebar({
                 currentFilter === 'users' ? "text-brand-400" : "text-slate-500 group-hover:text-slate-400"
               )} />
               <span>Gestión de Usuarios</span>
+            </button>
+
+            <button
+              onClick={() => handleFilterClick('audit')}
+              className={clsx(
+                "flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative w-full text-left",
+                currentFilter === 'audit'
+                  ? "bg-slate-800 text-white shadow-sm border border-slate-700/30" 
+                  : "hover:bg-slate-800/40 text-slate-400 hover:text-slate-200"
+              )}
+            >
+              {currentFilter === 'audit' && (
+                <span className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-brand-500 rounded-r" />
+              )}
+              <Database className={clsx(
+                "w-4 h-4 transition-colors shrink-0",
+                currentFilter === 'audit' ? "text-brand-400" : "text-slate-500 group-hover:text-slate-400"
+              )} />
+              <span>Auditoría de Acciones</span>
             </button>
           </div>
         )}

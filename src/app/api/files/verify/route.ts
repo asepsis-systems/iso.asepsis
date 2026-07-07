@@ -4,7 +4,318 @@ import { verifyToken } from '@/lib/auth-helpers';
 import { supabase } from '@/lib/supabase';
 import fs from 'fs';
 import path from 'path';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
+import crypto from 'crypto';
+
+function getVersionFromFilename(name: string): string {
+  const match = name.match(/_v(?:ersion)?_?(\d+(?:\.\d+)?)/i) || name.match(/v(?:ersion)?_?(\d+(?:\.\d+)?)/i);
+  return match ? match[1] : '1.0';
+}
+
+function getAreaAbbreviation(areaName: string): string {
+  const normalized = areaName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes('operacion')) return 'OP';
+  if (normalized.includes('administra')) return 'AD';
+  if (normalized.includes('mantenimien')) return 'MN';
+  if (normalized.includes('logistica')) return 'LO';
+  return 'GD';
+}
+
+function formatDateTime(date: Date | string): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const d = new Date(date);
+  const day = pad(d.getDate());
+  const month = pad(d.getMonth() + 1);
+  const year = d.getFullYear();
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  const seconds = pad(d.getSeconds());
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+}
+
+async function appendValidationPage(
+  pdfDoc: PDFDocument,
+  node: any,
+  doc: any,
+  currentUser: any,
+  currentIp: string
+) {
+  // 1. Add A4 page
+  const page = pdfDoc.addPage(PageSizes.A4);
+  const { width, height } = page.getSize();
+  
+  // 2. Load Fonts
+  const fontHelvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontHelveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  
+  // 3. Load Logo of ASEPSIS PERÚ
+  let logoImg = null;
+  try {
+    const logoPath = path.join(process.cwd(), 'public', 'logo2.jpg');
+    if (fs.existsSync(logoPath)) {
+      const logoBuffer = fs.readFileSync(logoPath);
+      logoImg = await pdfDoc.embedJpg(logoBuffer);
+    }
+  } catch (err) {
+    console.error('Error loading logo for validation page:', err);
+  }
+  
+  // 4. Draw Header
+  page.drawRectangle({
+    x: 30,
+    y: height - 80,
+    width: width - 60,
+    height: 50,
+    color: rgb(0.96, 0.97, 0.98),
+    borderColor: rgb(0.8, 0.82, 0.85),
+    borderWidth: 1
+  });
+  
+  if (logoImg) {
+    const logoW = 100;
+    const logoH = 30;
+    page.drawImage(logoImg, {
+      x: 40,
+      y: height - 70,
+      width: logoW,
+      height: logoH
+    });
+  } else {
+    page.drawText('ASEPSIS PERÚ', {
+      x: 40,
+      y: height - 58,
+      size: 14,
+      font: fontHelveticaBold,
+      color: rgb(0.08, 0.18, 0.36)
+    });
+  }
+  
+  const titleText = 'HOJA DE VALIDACIÓN Y APROBACIONES';
+  const titleWidth = fontHelveticaBold.widthOfTextAtSize(titleText, 11);
+  page.drawText(titleText, {
+    x: width - 40 - titleWidth,
+    y: height - 58,
+    size: 11,
+    font: fontHelveticaBold,
+    color: rgb(0.08, 0.18, 0.36)
+  });
+  
+  // 5. Draw Document Details Section
+  let y = height - 100;
+  
+  page.drawText('DETALLES DEL DOCUMENTO', {
+    x: 30,
+    y: y - 12,
+    size: 9,
+    font: fontHelveticaBold,
+    color: rgb(0.4, 0.45, 0.5)
+  });
+  
+  y -= 20;
+  
+  const detailBoxH = 80;
+  page.drawRectangle({
+    x: 30,
+    y: y - detailBoxH,
+    width: width - 60,
+    height: detailBoxH,
+    color: rgb(0.98, 0.98, 0.99),
+    borderColor: rgb(0.9, 0.91, 0.93),
+    borderWidth: 1
+  });
+  
+  const docVersion = getVersionFromFilename(node.name);
+  const areaName = doc?.area?.name || 'Gestión Documental';
+  const areaAbbr = getAreaAbbreviation(areaName);
+  const docCode = `ASEPSIS-${areaAbbr}-${node.id.split('-')[0].toUpperCase()}`;
+  const docEmitDate = new Date(node.createdAt).toLocaleDateString('es-PE', { timeZone: 'America/Lima' });
+  
+  page.drawText('Nombre del documento:', { x: 45, y: y - 20, size: 8.5, font: fontHelveticaBold, color: rgb(0.3, 0.3, 0.3) });
+  page.drawText(node.name, { x: 160, y: y - 20, size: 8.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+  
+  page.drawText('Código del documento:', { x: 45, y: y - 35, size: 8.5, font: fontHelveticaBold, color: rgb(0.3, 0.3, 0.3) });
+  page.drawText(docCode, { x: 160, y: y - 35, size: 8.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+  
+  page.drawText('Versión:', { x: 45, y: y - 50, size: 8.5, font: fontHelveticaBold, color: rgb(0.3, 0.3, 0.3) });
+  page.drawText(docVersion, { x: 160, y: y - 50, size: 8.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+  
+  page.drawText('Fecha de emisión:', { x: 340, y: y - 20, size: 8.5, font: fontHelveticaBold, color: rgb(0.3, 0.3, 0.3) });
+  page.drawText(docEmitDate, { x: 440, y: y - 20, size: 8.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+  
+  page.drawText('Estado del documento:', { x: 340, y: y - 35, size: 8.5, font: fontHelveticaBold, color: rgb(0.3, 0.3, 0.3) });
+  
+  page.drawRectangle({
+    x: 440,
+    y: y - 39,
+    width: 65,
+    height: 14,
+    color: rgb(0.9, 0.98, 0.93),
+    borderColor: rgb(0.6, 0.9, 0.7),
+    borderWidth: 0.5
+  });
+  page.drawText('APROBADO', { x: 447, y: y - 34, size: 7.5, font: fontHelveticaBold, color: rgb(0.1, 0.5, 0.25) });
+  
+  y -= detailBoxH + 15;
+  
+  // 6. Draw Signatures Section
+  page.drawText('FIRMAS Y APROBACIONES REGISTRADAS', {
+    x: 30,
+    y: y - 12,
+    size: 9,
+    font: fontHelveticaBold,
+    color: rgb(0.4, 0.45, 0.5)
+  });
+  
+  y -= 20;
+  
+  const audits = await db.audit.findMany({
+    where: {
+      action: 'FIRMAR_DOCUMENTO',
+      detail: {
+        contains: node.name
+      }
+    }
+  });
+  
+  const signatures = await db.signature.findMany({
+    where: { documentId: doc.id },
+    include: { user: true }
+  });
+  
+  const verifiers = doc?.area?.verifiers || [];
+  const verifierOrderMap = new Map<string, number>();
+  verifiers.forEach((v: any) => {
+    verifierOrderMap.set(v.userId, v.signOrder);
+  });
+  
+  const sortedSignatures = signatures.sort((a, b) => {
+    const orderA = verifierOrderMap.get(a.userId) || 99;
+    const orderB = verifierOrderMap.get(b.userId) || 99;
+    return orderA - orderB;
+  });
+  
+  const cardH = 90;
+  for (const sig of sortedSignatures) {
+    const isCurrent = sig.userId === currentUser.id;
+    const sigUser = sig.user;
+    
+    page.drawRectangle({
+      x: 30,
+      y: y - cardH,
+      width: width - 60,
+      height: cardH,
+      color: rgb(1, 1, 1),
+      borderColor: rgb(0.88, 0.9, 0.92),
+      borderWidth: 1
+    });
+    
+    let verifierIp = '127.0.0.1';
+    if (isCurrent) {
+      verifierIp = currentIp;
+    } else {
+      const audit = audits.find(a => a.username === sigUser.username);
+      if (audit) {
+        try {
+          verifierIp = JSON.parse(audit.detail).ip || '127.0.0.1';
+        } catch {}
+      }
+    }
+    
+    const signDateStr = isCurrent 
+      ? formatDateTime(new Date()) 
+      : (sig.signedAt ? formatDateTime(sig.signedAt) : 'Pendiente');
+    
+    let cargo = sigUser.cargo ? sigUser.cargo : 'Verificador';
+    if (!sigUser.cargo) {
+      if (sigUser.role === 'ADMIN') {
+        cargo = 'Gerente General';
+      } else if (sigUser.role === 'VERIFIER') {
+        cargo = 'Verificador de Control';
+      } else if (sigUser.role === 'CREATOR') {
+        cargo = 'Creador';
+      }
+    }
+    
+    page.drawText(sigUser.name.toUpperCase(), { x: 45, y: y - 20, size: 9, font: fontHelveticaBold, color: rgb(0.08, 0.18, 0.36) });
+    
+    page.drawText('Cargo:', { x: 45, y: y - 35, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText(cargo, { x: 120, y: y - 35, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+    
+    page.drawText('Fecha / Hora:', { x: 45, y: y - 48, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText(signDateStr, { x: 120, y: y - 48, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+    
+    page.drawText('Dirección IP:', { x: 45, y: y - 61, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText(verifierIp, { x: 120, y: y - 61, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+    
+    page.drawText('Estado Firma:', { x: 45, y: y - 74, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText('APROBADO Y FIRMADO', { x: 120, y: y - 74, size: 7.5, font: fontHelveticaBold, color: rgb(0.1, 0.5, 0.25) });
+    
+    if (sigUser.signature) {
+      try {
+        const sigBuffer = await getSignatureBuffer(sigUser.signature);
+        if (sigBuffer) {
+          let sigImg;
+          if (sigUser.signature.toLowerCase().endsWith('.jpg') || sigUser.signature.toLowerCase().endsWith('.jpeg')) {
+            sigImg = await pdfDoc.embedJpg(sigBuffer);
+          } else {
+            sigImg = await pdfDoc.embedPng(sigBuffer);
+          }
+          if (sigImg) {
+            const sigImgW = 100;
+            const sigImgH = 50;
+            page.drawImage(sigImg, {
+              x: width - 40 - sigImgW,
+              y: y - cardH + (cardH - sigImgH) / 2,
+              width: sigImgW,
+              height: sigImgH
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error drawing signature on validation page for:', sigUser.name, err);
+      }
+    }
+    
+    y -= cardH + 12;
+  }
+  
+  // 7. Draw Footer Section
+  const footerY = 80;
+  
+  page.drawLine({
+    start: { x: 30, y: footerY + 50 },
+    end: { x: width - 30, y: footerY + 50 },
+    thickness: 0.5,
+    color: rgb(0.7, 0.72, 0.75)
+  });
+  
+  const now = new Date();
+  const pad = (num: number) => num.toString().padStart(2, '0');
+  const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  const shortId = (currentUser.id || node.id || '00000').substring(0, 5).toUpperCase();
+  const uniqueCode = `DOC-${dateStr}-${shortId}`;
+  
+  const docHash = crypto.createHash('sha256').update(await pdfDoc.save()).digest('hex');
+  
+  page.drawText('CÓDIGO ÚNICO DE VERIFICACIÓN:', { x: 30, y: footerY + 38, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+  page.drawText(uniqueCode, { x: 180, y: footerY + 38, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+  
+  page.drawText('HASH SHA-256 DEL DOCUMENTO:', { x: 30, y: footerY + 26, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+  page.drawText(docHash, { x: 180, y: footerY + 26, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+  
+  page.drawText('FECHA DE GENERACIÓN REPORTE:', { x: 30, y: footerY + 14, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+  page.drawText(formatDateTime(now), { x: 180, y: footerY + 14, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+  
+  const footerText = 'Generado automáticamente por el Sistema de Gestión Documental de ASEPSIS PERÚ.';
+  const footerTextW = fontHelvetica.widthOfTextAtSize(footerText, 7);
+  page.drawText(footerText, {
+    x: (width - footerTextW) / 2,
+    y: footerY - 10,
+    size: 7,
+    font: fontHelvetica,
+    color: rgb(0.5, 0.53, 0.56)
+  });
+}
 
 async function getSignatureBuffer(signaturePath: string | null): Promise<Buffer | null> {
   if (!signaturePath) return null;
@@ -30,6 +341,7 @@ async function getSignatureBuffer(signaturePath: string | null): Promise<Buffer 
 export async function POST(request: NextRequest) {
   try {
     const { fileId, placement, action, annotations } = await request.json();
+    const clientIp = request.headers.get('x-forwarded-for') || request.ip || '127.0.0.1';
 
     if (!fileId) {
       return NextResponse.json({ error: 'ID del archivo es obligatorio' }, { status: 400 });
@@ -75,6 +387,94 @@ export async function POST(request: NextRequest) {
     const diskFileName = `${node.id}-${node.name}`;
     const normalizedCreator = node.creator?.trim().toLowerCase() || '';
     const normalizedUser = user.name?.trim().toLowerCase() || '';
+
+    // Fetch area document details if it exists
+    const doc = await db.document.findUnique({
+      where: { nodeId: fileId },
+      include: {
+        area: {
+          include: {
+            verifiers: {
+              orderBy: { signOrder: 'asc' },
+              include: {
+                user: true
+              }
+            }
+          }
+        },
+        signatures: true
+      }
+    });
+
+    if (doc && doc.status === 'APROBADO') {
+      return NextResponse.json({ error: 'No se puede modificar un documento que ya está completamente aprobado.' }, { status: 400 });
+    }
+
+    // Handle Document Rejection
+    if (action === 'reject') {
+      if (!doc) {
+        return NextResponse.json({ error: 'Este documento no pertenece a un área con flujo de firmas.' }, { status: 400 });
+      }
+
+      const userSignature = doc.signatures.find(s => s.userId === user.id);
+      if (!userSignature) {
+        return NextResponse.json({ error: 'No eres un verificador asignado para este documento.' }, { status: 403 });
+      }
+
+      // Update signature status to RECHAZADO
+      await db.signature.update({
+        where: { id: userSignature.id },
+        data: {
+          status: 'RECHAZADO',
+          signedAt: new Date()
+        }
+      });
+
+      // Update document status to RECHAZADO
+      await db.document.update({
+        where: { id: doc.id },
+        data: { status: 'RECHAZADO' }
+      });
+
+      // Audit Log
+      let fileHash = '';
+      try {
+        let fileBuffer: Buffer | null = null;
+        if (supabase) {
+          const { data } = await supabase.storage.from('files').download(diskFileName);
+          if (data) fileBuffer = Buffer.from(await data.arrayBuffer());
+        } else {
+          const filePath = path.join(process.cwd(), 'uploads', diskFileName);
+          if (fs.existsSync(filePath)) fileBuffer = fs.readFileSync(filePath);
+        }
+        if (fileBuffer) {
+          fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+        }
+      } catch (err) {
+        console.error('Error computing hash for reject audit:', err);
+      }
+
+      await db.audit.create({
+        data: {
+          username: user.username,
+          action: 'RECHAZAR_DOCUMENTO',
+          detail: JSON.stringify({
+            message: `Rechazó el documento "${node.name}" en el área "${doc.area.name}"`,
+            documentName: node.name,
+            action: 'RECHAZAR_DOCUMENTO',
+            ip: clientIp,
+            status: 'RECHAZADO',
+            sha256: fileHash,
+            timestamp: new Date()
+          })
+        }
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Documento rechazado con éxito.'
+      });
+    }
 
     // Handle Signature Removal
     if (action === 'remove') {
@@ -155,47 +555,158 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      if (doc) {
+        // Sync with Signature table
+        const verifiersByOrder = doc.area.verifiers;
+        for (const v of verifiersByOrder) {
+          if (v.signOrder >= verifierSlotToRemove) {
+            const sig = doc.signatures.find(s => s.userId === v.userId);
+            if (sig) {
+              await db.signature.update({
+                where: { id: sig.id },
+                data: {
+                  status: 'PENDIENTE',
+                  signedAt: null
+                }
+              });
+            }
+          }
+        }
+
+        // Update Document status
+        await db.document.update({
+          where: { id: doc.id },
+          data: {
+            status: verifierSlotToRemove === 1 ? 'PENDIENTE' : 'EN_PROCESO'
+          }
+        });
+
+        // Audit Log
+        let fileHash = '';
+        try {
+          let fileBuffer: Buffer | null = null;
+          if (supabase) {
+            const { data } = await supabase.storage.from('files').download(diskFileName);
+            if (data) fileBuffer = Buffer.from(await data.arrayBuffer());
+          } else {
+            const filePath = path.join(process.cwd(), 'uploads', diskFileName);
+            if (fs.existsSync(filePath)) fileBuffer = fs.readFileSync(filePath);
+          }
+          if (fileBuffer) {
+            fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+          }
+        } catch (err) {
+          console.error('Error computing hash for remove audit:', err);
+        }
+
+        await db.audit.create({
+          data: {
+            username: user.username,
+            action: 'REMOVER_FIRMA',
+            detail: JSON.stringify({
+              message: `Removió su firma del documento "${node.name}" en el área "${doc.area.name}"`,
+              documentName: node.name,
+              action: 'REMOVER_FIRMA',
+              ip: clientIp,
+              status: verifierSlotToRemove === 1 ? 'PENDIENTE' : 'EN_PROCESO',
+              sha256: fileHash,
+              timestamp: new Date()
+            })
+          }
+        });
+      }
+
       const updatedNode = await db.node.update({
         where: { id: fileId },
         data: updateData
       });
 
+      const finalNode = await db.node.findUnique({
+        where: { id: fileId },
+        include: {
+          document: {
+            include: {
+              signatures: true
+            }
+          }
+        }
+      });
+
       return NextResponse.json({
         success: true,
         message: 'Tu firma ha sido removida con éxito.',
-        node: updatedNode
+        node: finalNode || updatedNode
       });
     }
 
-    // Rule 1: The creator cannot verify their own file
-    if (normalizedCreator === normalizedUser) {
-      return NextResponse.json({ 
-        error: 'Restricción de control: El creador del archivo no puede firmar como verificador.' 
-      }, { status: 403 });
-    }
-
-    // Rule 2: The user cannot sign twice
-    const alreadySigned = 
-      node.verifier1?.trim().toLowerCase() === normalizedUser || 
-      node.verifier2?.trim().toLowerCase() === normalizedUser || 
-      node.verifier3?.trim().toLowerCase() === normalizedUser;
-
-    if (alreadySigned) {
-      return NextResponse.json({ 
-        error: 'Ya has firmado/verificado este documento.' 
-      }, { status: 400 });
-    }
-
-    // Rule 3: Find the next empty verifier slot in order (1 -> 2 -> 3)
     let updateData: any = {};
-    if (!node.verifier1) {
-      updateData.verifier1 = user.name;
-    } else if (!node.verifier2) {
-      updateData.verifier2 = user.name;
-    } else if (!node.verifier3) {
-      updateData.verifier3 = user.name;
+    let myOrder = 0;
+
+    if (doc) {
+      // Area Signature Flow Validation
+      const userSignature = doc.signatures.find(s => s.userId === user.id);
+      if (!userSignature) {
+        return NextResponse.json({ error: 'No eres un verificador asignado para este documento/área.' }, { status: 403 });
+      }
+
+      if (userSignature.status === 'APROBADO') {
+        return NextResponse.json({ error: 'Ya has firmado este documento.' }, { status: 400 });
+      }
+
+      // Find my signOrder
+      const verifierConf = doc.area.verifiers.find(v => v.userId === user.id);
+      myOrder = verifierConf ? verifierConf.signOrder : 99;
+
+      // Enforce sequential signature order
+      const previousVerifiers = doc.area.verifiers.filter(v => v.signOrder < myOrder);
+      for (const prev of previousVerifiers) {
+        const prevSig = doc.signatures.find(s => s.userId === prev.userId);
+        if (!prevSig || prevSig.status !== 'APROBADO') {
+          return NextResponse.json({ 
+            error: `Es el turno de firma del verificador anterior (${prev.user?.name || 'orden ' + prev.signOrder}).` 
+          }, { status: 400 });
+        }
+      }
+
+      // Assign to appropriate verifier slot
+      if (myOrder === 1) {
+        updateData.verifier1 = user.name;
+      } else if (myOrder === 2) {
+        updateData.verifier2 = user.name;
+      } else if (myOrder === 3) {
+        updateData.verifier3 = user.name;
+      }
     } else {
-      return NextResponse.json({ error: 'Este documento ya está completamente verificado (3/3 firmas).' }, { status: 400 });
+      // Legacy Orderless Flow Validation
+      // Rule 1: The creator cannot verify their own file
+      if (normalizedCreator === normalizedUser) {
+        return NextResponse.json({ 
+          error: 'Restricción de control: El creador del archivo no puede firmar como verificador.' 
+        }, { status: 403 });
+      }
+
+      // Rule 2: The user cannot sign twice
+      const alreadySigned = 
+        node.verifier1?.trim().toLowerCase() === normalizedUser || 
+        node.verifier2?.trim().toLowerCase() === normalizedUser || 
+        node.verifier3?.trim().toLowerCase() === normalizedUser;
+
+      if (alreadySigned) {
+        return NextResponse.json({ 
+          error: 'Ya has firmado/verificado este documento.' 
+        }, { status: 400 });
+      }
+
+      // Rule 3: Find the next empty verifier slot in order (1 -> 2 -> 3)
+      if (!node.verifier1) {
+        updateData.verifier1 = user.name;
+      } else if (!node.verifier2) {
+        updateData.verifier2 = user.name;
+      } else if (!node.verifier3) {
+        updateData.verifier3 = user.name;
+      } else {
+        return NextResponse.json({ error: 'Este documento ya está completamente verificado (3/3 firmas).' }, { status: 400 });
+      }
     }
 
     // Gather names for user signatures mapping
@@ -254,13 +765,17 @@ export async function POST(request: NextRequest) {
     const certDate = new Date().toLocaleString('es-PE', { timeZone: 'America/Lima' });
     const totalSignatures = [creatorDetail, verifier1Detail, verifier2Detail, verifier3Detail].filter(Boolean).length;
 
+    let pageSigned: number | null = null;
+    let coordX: number | null = null;
+    let coordY: number | null = null;
+
     const fileLower = node.name.toLowerCase();
     const isPdf = fileLower.endsWith('.pdf');
     const isDocx = fileLower.endsWith('.docx');
+    let fileBuffer: any;
 
     if (isPdf || isDocx) {
       // 1. Download/Read original file buffer
-      let fileBuffer: Buffer;
       if (supabase) {
         const { data, error: downloadError } = await supabase.storage.from('files').download(diskFileName);
         if (downloadError || !data) {
@@ -300,9 +815,16 @@ export async function POST(request: NextRequest) {
         fs.writeFileSync(backupPath, fileBuffer);
       }
 
+      let willBeApproved = false;
+      if (doc) {
+        const otherSigs = doc.signatures.filter(s => s.userId !== user.id);
+        const allOthersApproved = otherSigs.every(s => s.status === 'APROBADO');
+        willBeApproved = allOthersApproved;
+      }
+
       // 2. Perform stamping
       if (isPdf) {
-        if (placement || (annotations && annotations.length > 0)) {
+        if (placement || (annotations && annotations.length > 0) || willBeApproved) {
           const pdfDoc = await PDFDocument.load(fileBuffer);
           const pages = pdfDoc.getPages();
           const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -315,6 +837,9 @@ export async function POST(request: NextRequest) {
             } else if (placement.page === 'number' && placement.pageNumber) {
               pageIdx = Math.min(Math.max(0, placement.pageNumber - 1), pages.length - 1);
             }
+            pageSigned = pageIdx + 1;
+            coordX = placement.x;
+            coordY = placement.y;
             const targetPage = pages[pageIdx];
             const { width, height } = targetPage.getSize();
 
@@ -343,17 +868,140 @@ export async function POST(request: NextRequest) {
                 }
 
                 if (img) {
-                  const sigW = 100;
-                  const sigH = 60;
+                  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+                  const scale = placement.scale || 1.0;
+                  const boxW = 160 * scale;
+                  const boxH = 110 * scale;
 
                   const targetX = (placement.x / 100) * width;
                   const targetY = (placement.y / 100) * height;
 
+                  const boxX = Math.max(0, Math.min(targetX - boxW / 2, width - boxW));
+                  const boxY = Math.max(0, Math.min(targetY - boxH / 2, height - boxH));
+
+                  // Draw premium bounding box (transparent background to avoid covering document text)
+                  targetPage.drawRectangle({
+                    x: boxX,
+                    y: boxY,
+                    width: boxW,
+                    height: boxH,
+                    borderColor: rgb(0.7, 0.7, 0.8),
+                    borderWidth: 1
+                  });
+
+                  // Draw signature image
+                  const imgW = 80 * scale;
+                  const imgH = 40 * scale;
+                  const imgX = boxX + (boxW - imgW) / 2;
+                  const imgY = boxY + boxH - imgH - (8 * scale);
+
                   targetPage.drawImage(img, {
-                    x: Math.max(0, Math.min(targetX - sigW / 2, width - sigW)),
-                    y: Math.max(0, Math.min(targetY - sigH / 2, height - sigH)),
-                    width: sigW,
-                    height: sigH
+                    x: imgX,
+                    y: imgY,
+                    width: imgW,
+                    height: imgH
+                  });
+
+                  // Draw user name (bold)
+                  const nameText = (user.name || '').toUpperCase();
+                  const nameFontSize = 7 * scale;
+                  const nameWidth = helveticaBold.widthOfTextAtSize(nameText, nameFontSize);
+                  const nameX = boxX + (boxW - nameWidth) / 2;
+                  const nameY = imgY - (11 * scale);
+
+                  targetPage.drawText(nameText, {
+                    x: nameX,
+                    y: nameY,
+                    size: nameFontSize,
+                    font: helveticaBold,
+                    color: rgb(0.1, 0.1, 0.2)
+                  });
+
+                  // Draw user cargo/role in Spanish
+                  let userRoleSpanish = user.cargo ? user.cargo : 'Verificador';
+                  if (!user.cargo) {
+                    if (user.role === 'ADMIN') {
+                      userRoleSpanish = 'Gerente General';
+                    } else if (user.role === 'VERIFIER') {
+                      userRoleSpanish = 'Verificador de Control';
+                    } else if (user.role === 'CREATOR') {
+                      userRoleSpanish = 'Creador';
+                    }
+                  }
+
+                  const roleFontSize = 6 * scale;
+                  const roleWidth = helveticaFont.widthOfTextAtSize(userRoleSpanish, roleFontSize);
+                  const roleX = boxX + (boxW - roleWidth) / 2;
+                  const roleY = nameY - (8 * scale);
+
+                  targetPage.drawText(userRoleSpanish, {
+                    x: roleX,
+                    y: roleY,
+                    size: roleFontSize,
+                    font: helveticaFont,
+                    color: rgb(0.3, 0.3, 0.4)
+                  });
+
+                  // Draw certification stamp text
+                  const labelText = 'Firma Digital';
+                  const labelFontSize = 5.5 * scale;
+                  const labelWidth = helveticaBold.widthOfTextAtSize(labelText, labelFontSize);
+                  const labelX = boxX + (boxW - labelWidth) / 2;
+                  const labelY = roleY - (10 * scale);
+
+                  targetPage.drawText(labelText, {
+                    x: labelX,
+                    y: labelY,
+                    size: labelFontSize,
+                    font: helveticaBold,
+                    color: rgb(0.1, 0.5, 0.3)
+                  });
+
+                  // Draw Date/Time
+                  const pad = (num: number) => num.toString().padStart(2, '0');
+                  const certDate = new Date().toLocaleString('es-PE', { 
+                    timeZone: 'America/Lima',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                  });
+
+                  const dateText = `Fecha: ${certDate}`;
+                  const dateFontSize = 5 * scale;
+                  const dateWidth = helveticaFont.widthOfTextAtSize(dateText, dateFontSize);
+                  const dateX = boxX + (boxW - dateWidth) / 2;
+                  const dateY = labelY - (7 * scale);
+
+                  targetPage.drawText(dateText, {
+                    x: dateX,
+                    y: dateY,
+                    size: dateFontSize,
+                    font: helveticaFont,
+                    color: rgb(0.4, 0.4, 0.5)
+                  });
+
+                  // Draw unique validation code
+                  const now = new Date();
+                  const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+                  const shortId = (user.id || fileId || '00000').substring(0, 5).toUpperCase();
+                  const uniqueCode = `DOC-${dateStr}-${shortId}`;
+
+                  const codeText = `Código: ${uniqueCode}`;
+                  const codeFontSize = 5 * scale;
+                  const codeWidth = helveticaFont.widthOfTextAtSize(codeText, codeFontSize);
+                  const codeX = boxX + (boxW - codeWidth) / 2;
+                  const codeY = dateY - (6 * scale);
+
+                  targetPage.drawText(codeText, {
+                    x: codeX,
+                    y: codeY,
+                    size: codeFontSize,
+                    font: helveticaFont,
+                    color: rgb(0.4, 0.4, 0.5)
                   });
                 }
               } catch (err) {
@@ -448,6 +1096,9 @@ export async function POST(request: NextRequest) {
               }
             }
           }
+
+          // Note: The validation certificate is now generated dynamically during download
+          // to support multiple download options (Option 1, 2, and 3).
 
           fileBuffer = Buffer.from(await pdfDoc.save());
         }
@@ -623,10 +1274,97 @@ export async function POST(request: NextRequest) {
       data: updateData
     });
 
+    // If this is an Area Document, update Signature status, Document status, and log Audit
+    if (doc) {
+      const userSignature = doc.signatures.find(s => s.userId === user.id);
+      if (userSignature) {
+        await db.signature.update({
+          where: { id: userSignature.id },
+          data: {
+            status: 'APROBADO',
+            signedAt: new Date(),
+            pageNumber: pageSigned,
+            coordX: coordX,
+            coordY: coordY,
+            ipAddress: clientIp
+          }
+        });
+      }
+
+      // Recalculate document status
+      const allSigs = await db.signature.findMany({
+        where: { documentId: doc.id }
+      });
+      const pendingSigs = allSigs.filter(s => s.status !== 'APROBADO');
+
+      const newDocStatus = pendingSigs.length === 0 ? 'APROBADO' : 'EN_PROCESO';
+
+      await db.document.update({
+        where: { id: doc.id },
+        data: { status: newDocStatus }
+      });
+
+      // Log Audit Trail
+      let fileHash = '';
+      if (typeof fileBuffer !== 'undefined' && fileBuffer) {
+        fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+      } else {
+        try {
+          let buf: Buffer | null = null;
+          if (supabase) {
+            const { data } = await supabase.storage.from('files').download(diskFileName);
+            if (data) buf = Buffer.from(await data.arrayBuffer());
+          } else {
+            const uploadDir = path.join(process.cwd(), 'uploads');
+            const filePath = path.join(uploadDir, diskFileName);
+            if (fs.existsSync(filePath)) buf = fs.readFileSync(filePath);
+          }
+          if (buf) {
+            fileHash = crypto.createHash('sha256').update(buf).digest('hex');
+          }
+        } catch (err) {
+          console.error('Error computing hash for audit:', err);
+        }
+      }
+
+      await db.audit.create({
+        data: {
+          username: user.username,
+          action: 'FIRMAR_DOCUMENTO',
+          detail: JSON.stringify({
+            message: `Firmó el documento "${node.name}" en el área "${doc.area.name}" (Estado: ${newDocStatus})`,
+            documentName: node.name,
+            action: 'FIRMAR_DOCUMENTO',
+            ip: clientIp,
+            status: newDocStatus,
+            sha256: fileHash,
+            timestamp: new Date(),
+            signerName: user.name,
+            cargo: user.cargo || (user.role === 'ADMIN' ? 'Gerente General' : (user.role === 'VERIFIER' ? 'Verificador de Control' : 'Creador')),
+            email: user.email || `${user.username}@asepsis.pe`,
+            page: pageSigned,
+            x: coordX,
+            y: coordY
+          })
+        }
+      });
+    }
+
+    const finalNode = await db.node.findUnique({
+      where: { id: fileId },
+      include: {
+        document: {
+          include: {
+            signatures: true
+          }
+        }
+      }
+    });
+
     return NextResponse.json({
       success: true,
       message: 'Firma registrada con éxito.',
-      node: updatedNode
+      node: finalNode || updatedNode
     });
 
   } catch (error: any) {

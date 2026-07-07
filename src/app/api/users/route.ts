@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
         name: true,
         role: true,
         signature: true,
+        cargo: true,
+        email: true,
+        areaId: true,
         createdAt: true,
       },
       orderBy: {
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, password, name, role } = body;
+    const { username, password, name, role, areaId, cargo, email } = body;
 
     if (!username || !password || !name || !role) {
       return NextResponse.json({ error: 'Todos los campos son obligatorios' }, { status: 400 });
@@ -72,6 +75,9 @@ export async function POST(request: NextRequest) {
         password: hashPassword(password),
         name: name.trim(),
         role: role.toUpperCase(),
+        cargo: cargo ? cargo.trim() : null,
+        email: email ? email.trim() : null,
+        areaId: areaId || null,
       },
       select: {
         id: true,
@@ -79,6 +85,9 @@ export async function POST(request: NextRequest) {
         name: true,
         role: true,
         signature: true,
+        cargo: true,
+        email: true,
+        areaId: true,
         createdAt: true,
       },
     });
@@ -130,7 +139,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, username, name, password, role, signature } = body;
+    const { id, username, name, password, role, signature, areaId, cargo, email } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'El ID del usuario es obligatorio' }, { status: 400 });
@@ -175,6 +184,18 @@ export async function PUT(request: NextRequest) {
       updateData.signature = signature;
     }
 
+    if (areaId !== undefined) {
+      updateData.areaId = areaId;
+    }
+
+    if (cargo !== undefined) {
+      updateData.cargo = cargo ? cargo.trim() : null;
+    }
+
+    if (email !== undefined) {
+      updateData.email = email ? email.trim() : null;
+    }
+
     // If nothing to update, return success early
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ success: true, message: 'No se realizaron cambios' });
@@ -189,6 +210,9 @@ export async function PUT(request: NextRequest) {
         name: true,
         role: true,
         signature: true,
+        cargo: true,
+        email: true,
+        areaId: true,
         createdAt: true,
       },
     });

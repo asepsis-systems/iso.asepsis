@@ -75,10 +75,11 @@ export default function LoginPage() {
         <div className="flex flex-col items-center mb-8 text-center animate-in fade-in slide-in-from-top-4 duration-500">
           <img 
             src="/logo2.jpg" 
-            alt="iso.asepsis logo" 
+            alt="ISO-ASEPSIS logo" 
+            style={{ height: '80px', width: 'auto' }}
             className="h-20 w-auto mb-4 object-contain rounded-2xl border border-white/15 shadow-xl"
           />
-          <h1 className="text-2xl font-bold text-white tracking-tight">T&CH Asepsis</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">ISO-ASEPSIS</h1>
           <p className="text-xs uppercase tracking-[0.24em] text-brand-200 mt-2 mb-2">
             ISO-ASEPSIS
           </p>

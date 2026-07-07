@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth-helpers';
 import fs from 'fs';
 import path from 'path';
+import { canUserAccessNode, getNodeName, logAuthorization } from '@/lib/permission';
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,37 +41,53 @@ export async function GET(request: NextRequest) {
       else if (filter === 'pending-my-signature' && user) {
         whereClause.type = 'FILE';
         whereClause.OR = [
-          { creator: null },
-          { NOT: { creator: user.name } }
-        ];
-        whereClause.AND = [
-          // User has not signed verifier 1
+          // New system: has document and user has a pending signature
           {
-            OR: [
-              { verifier1: null },
-              { NOT: { verifier1: user.name } }
-            ]
+            document: {
+              status: { in: ['PENDIENTE', 'EN_PROCESO'] },
+              signatures: {
+                some: {
+                  userId: user.id,
+                  status: 'PENDIENTE'
+                }
+              }
+            }
           },
-          // User has not signed verifier 2
+          // Legacy system fallback: no document and fits old criteria
           {
-            OR: [
-              { verifier2: null },
-              { NOT: { verifier2: user.name } }
-            ]
-          },
-          // User has not signed verifier 3
-          {
-            OR: [
-              { verifier3: null },
-              { NOT: { verifier3: user.name } }
-            ]
-          },
-          // At least one slot is empty
-          {
-            OR: [
-              { verifier1: null },
-              { verifier2: null },
-              { verifier3: null }
+            AND: [
+              { document: null },
+              {
+                OR: [
+                  { creator: null },
+                  { NOT: { creator: user.name } }
+                ]
+              },
+              {
+                OR: [
+                  { verifier1: null },
+                  { NOT: { verifier1: user.name } }
+                ]
+              },
+              {
+                OR: [
+                  { verifier2: null },
+                  { NOT: { verifier2: user.name } }
+                ]
+              },
+              {
+                OR: [
+                  { verifier3: null },
+                  { NOT: { verifier3: user.name } }
+                ]
+              },
+              {
+                OR: [
+                  { verifier1: null },
+                  { verifier2: null },
+                  { verifier3: null }
+                ]
+              }
             ]
           }
         ];
@@ -78,36 +95,144 @@ export async function GET(request: NextRequest) {
       else if (filter === 'signed-by-me' && user) {
         whereClause.type = 'FILE';
         whereClause.OR = [
-          { verifier1: user.name },
-          { verifier2: user.name },
-          { verifier3: user.name }
+          // New system: has document and user has approved it
+          {
+            document: {
+              signatures: {
+                some: {
+                  userId: user.id,
+                  status: 'APROBADO'
+                }
+              }
+            }
+          },
+          // Legacy system fallback: no document and user is one of the verifier columns
+          {
+            AND: [
+              { document: null },
+              {
+                OR: [
+                  { verifier1: user.name },
+                  { verifier2: user.name },
+                  { verifier3: user.name }
+                ]
+              }
+            ]
+          }
         ];
       }
       else if (filter === 'my-elaborated' && user) {
         whereClause.type = 'FILE';
-        whereClause.creator = user.name;
+        whereClause.OR = [
+          // New system: user is document creator
+          {
+            document: {
+              creatorId: user.id
+            }
+          },
+          // Legacy system: creator name matches
+          {
+            AND: [
+              { document: null },
+              { creator: user.name }
+            ]
+          }
+        ];
       }
       else if (filter === 'my-elaborated-pending' && user) {
         whereClause.type = 'FILE';
-        whereClause.creator = user.name;
         whereClause.OR = [
-          { verifier1: null },
-          { verifier2: null },
-          { verifier3: null }
+          // New system: creator matches and status is pending
+          {
+            document: {
+              creatorId: user.id,
+              status: { in: ['PENDIENTE', 'EN_PROCESO'] }
+            }
+          },
+          // Legacy system: creator name matches, no document, and empty verifiers
+          {
+            AND: [
+              { document: null },
+              { creator: user.name },
+              {
+                OR: [
+                  { verifier1: null },
+                  { verifier2: null },
+                  { verifier3: null }
+                ]
+              }
+            ]
+          }
         ];
       }
       else if (filter === 'my-elaborated-approved' && user) {
         whereClause.type = 'FILE';
-        whereClause.creator = user.name;
-        whereClause.verifier1 = { not: null };
-        whereClause.verifier2 = { not: null };
-        whereClause.verifier3 = { not: null };
+        whereClause.OR = [
+          // New system: creator matches and status is approved
+          {
+            document: {
+              creatorId: user.id,
+              status: 'APROBADO'
+            }
+          },
+          // Legacy system: creator matches, no document, and all verifiers set
+          {
+            AND: [
+              { document: null },
+              { creator: user.name },
+              { verifier1: { not: null } },
+              { verifier2: { not: null } },
+              { verifier3: { not: null } }
+            ]
+          }
+        ];
       }
       // Handles navigation inside folders
       else if (!search && filter !== 'recent') {
         if (parentId === 'root' || !parentId) {
-          whereClause.parentId = null;
+          if (user && user.role !== 'ADMIN' && user.areaId) {
+            const userArea = await db.area.findUnique({ where: { id: user.areaId } });
+            if (userArea && userArea.folderNodeId) {
+              whereClause.id = userArea.folderNodeId;
+            } else {
+              whereClause.id = 'non-existent-id';
+            }
+          } else {
+            whereClause.parentId = null;
+          }
         } else {
+          // Verify permission first
+          const allowed = await canUserAccessNode(user, parentId);
+          const parentName = await getNodeName(parentId);
+          const userAreaName = user && user.areaId 
+            ? (await db.area.findUnique({ where: { id: user.areaId } }))?.name || 'Área'
+            : 'General';
+
+          if (!allowed) {
+            if (user) {
+              await logAuthorization(
+                user.username,
+                userAreaName,
+                `Abrir carpeta "${parentName}"`,
+                parentName,
+                'Denegado'
+              );
+            }
+            return NextResponse.json(
+              { success: false, error: 'No tiene permisos para acceder a esta carpeta' },
+              { status: 403 }
+            );
+          } else {
+            if (user) {
+              await logAuthorization(
+                user.username,
+                userAreaName,
+                `Abrir carpeta "${parentName}"`,
+                parentName,
+                'Permitido'
+              );
+            }
+          }
           whereClause.parentId = parentId;
         }
       }
@@ -134,6 +259,20 @@ export async function GET(request: NextRequest) {
     const items = await db.node.findMany({
       where: whereClause,
       orderBy: orderBy,
+      include: {
+        areaFolder: true,
+        document: {
+          include: {
+            signatures: {
+              include: {
+                user: {
+                  select: { id: true, name: true, role: true }
+                }
+              }
+            }
+          }
+        }
+      }
     });
 
     // Fetch all users to map signatures by name
@@ -159,6 +298,19 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Filter items based on user area permissions (excluding ADMIN or General users)
+    const allowedItems: any[] = [];
+    for (const item of enrichedItems) {
+      if (!user || user.role === 'ADMIN' || !user.areaId) {
+        allowedItems.push(item);
+      } else {
+        const allowed = await canUserAccessNode(user, item.id);
+        if (allowed) {
+          allowedItems.push(item);
+        }
+      }
+    }
+
     // Also return current folder breadcrumbs if parentId is active
     let breadcrumbs: any[] = [];
     if (parentId && parentId !== 'root' && filter !== 'trash' && filter !== 'starred' && filter !== 'recent') {
@@ -177,7 +329,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ items: enrichedItems, breadcrumbs });
+    return NextResponse.json({ items: allowedItems, breadcrumbs });
   } catch (error: any) {
     console.error('Error fetching nodes:', error);
     return NextResponse.json({ error: 'Error al listar archivos: ' + error.message }, { status: 500 });
@@ -195,11 +347,59 @@ export async function POST(request: NextRequest) {
 
     const cleanParentId = (parentId === 'root' || parentId === '') ? null : parentId;
 
+    // Retrieve active user from session token
+    const token = request.cookies.get('session_token')?.value;
+    let currentUser: any = null;
+    if (token) {
+      const decoded = await verifyToken(token);
+      if (decoded) {
+        currentUser = await db.user.findUnique({
+          where: { id: decoded.userId }
+        });
+      }
+    }
+
+    if (!currentUser) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+
+
+    // Check permission to create folder
+    const allowed = await canUserAccessNode(currentUser, cleanParentId, true);
+    const parentName = await getNodeName(cleanParentId);
+    const userAreaName = currentUser.areaId 
+      ? (await db.area.findUnique({ where: { id: currentUser.areaId } }))?.name || 'Área'
+      : 'General';
+
+    if (!allowed) {
+      await logAuthorization(
+        currentUser.username,
+        userAreaName,
+        `Crear carpeta "${name}" en "${parentName}"`,
+        parentName,
+        'Denegado'
+      );
+      return NextResponse.json(
+        { success: false, error: 'No tiene permisos para crear carpetas en esta ubicación' },
+        { status: 403 }
+      );
+    } else {
+      await logAuthorization(
+        currentUser.username,
+        userAreaName,
+        `Crear carpeta "${name}" en "${parentName}"`,
+        parentName,
+        'Permitido'
+      );
+    }
+
     const folder = await db.node.create({
       data: {
         name,
         type: 'FOLDER',
         parentId: cleanParentId,
+        creator: currentUser.name,
       },
     });
 
@@ -217,6 +417,99 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'ID es obligatorio' }, { status: 400 });
+    }
+
+    const existingNode = await db.node.findUnique({
+      where: { id },
+      include: { document: true, areaFolder: true }
+    });
+
+    if (existingNode?.document?.status === 'APROBADO') {
+      return NextResponse.json({ error: 'No se puede modificar un documento completamente aprobado.' }, { status: 400 });
+    }
+
+    const token = request.cookies.get('session_token')?.value;
+    let currentUser: any = null;
+    if (token) {
+      const decoded = await verifyToken(token);
+      if (decoded) {
+        currentUser = await db.user.findUnique({
+          where: { id: decoded.userId }
+        });
+      }
+    }
+
+    if (!currentUser) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    // Check permission on the target node being updated
+    const nodeAllowed = await canUserAccessNode(currentUser, id, true);
+    const nodeName = existingNode ? existingNode.name : 'Desconocido';
+    const userAreaName = currentUser.areaId 
+      ? (await db.area.findUnique({ where: { id: currentUser.areaId } }))?.name || 'Área'
+      : 'General';
+
+    if (!nodeAllowed) {
+      await logAuthorization(
+        currentUser.username,
+        userAreaName,
+        `Modificar/Mover elemento "${nodeName}"`,
+        nodeName,
+        'Denegado'
+      );
+      return NextResponse.json(
+        { success: false, error: 'No tiene permisos para modificar este elemento.' },
+        { status: 403 }
+      );
+    }
+
+    // If parentId (move destination) is provided, validate destination folder access
+    if (parentId !== undefined) {
+      const destParentId = (parentId === 'root' || parentId === '') ? null : parentId;
+      const destAllowed = await canUserAccessNode(currentUser, destParentId, true);
+      const destParentName = await getNodeName(destParentId);
+      if (!destAllowed) {
+        await logAuthorization(
+          currentUser.username,
+          userAreaName,
+          `Mover elemento "${nodeName}" a "${destParentName}"`,
+          nodeName,
+          'Denegado'
+        );
+        return NextResponse.json(
+          { success: false, error: 'No tiene permisos para mover elementos a esa ubicación.' },
+          { status: 403 }
+        );
+      } else {
+        await logAuthorization(
+          currentUser.username,
+          userAreaName,
+          `Mover elemento "${nodeName}" a "${destParentName}"`,
+          nodeName,
+          'Permitido'
+        );
+      }
+    } else {
+      await logAuthorization(
+        currentUser.username,
+        userAreaName,
+        `Modificar elemento "${nodeName}"`,
+        nodeName,
+        'Permitido'
+      );
+    }
+
+    if (isTrashed === true) {
+      if (existingNode?.areaFolder) {
+        if (currentUser.role !== 'ADMIN') {
+          return NextResponse.json({ error: 'Solo los administradores pueden mover carpetas principales de área a la papelera.' }, { status: 403 });
+        }
+      } else {
+        if (currentUser.role !== 'ADMIN' && existingNode?.creator !== currentUser.name) {
+          return NextResponse.json({ error: 'No tienes permisos para mover este elemento a la papelera.' }, { status: 403 });
+        }
+      }
     }
 
     const updateData: any = {};
@@ -255,10 +548,68 @@ export async function DELETE(request: NextRequest) {
     // Retrieve file to delete on disk if necessary
     const node = await db.node.findUnique({
       where: { id },
+      include: { document: true, areaFolder: true }
     });
 
     if (!node) {
       return NextResponse.json({ error: 'Archivo no encontrado' }, { status: 404 });
+    }
+
+    if (node.document?.status === 'APROBADO') {
+      return NextResponse.json({ error: 'No se puede eliminar un documento completamente aprobado.' }, { status: 400 });
+    }
+
+    const token = request.cookies.get('session_token')?.value;
+    let currentUser: any = null;
+    if (token) {
+      const decoded = await verifyToken(token);
+      if (decoded) {
+        currentUser = await db.user.findUnique({
+          where: { id: decoded.userId }
+        });
+      }
+    }
+
+    if (!currentUser) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    const nodeAllowed = await canUserAccessNode(currentUser, id, true);
+    const nodeName = node.name;
+    const userAreaName = currentUser.areaId 
+      ? (await db.area.findUnique({ where: { id: currentUser.areaId } }))?.name || 'Área'
+      : 'General';
+
+    if (!nodeAllowed) {
+      await logAuthorization(
+        currentUser.username,
+        userAreaName,
+        `Eliminar permanentemente "${nodeName}"`,
+        nodeName,
+        'Denegado'
+      );
+      return NextResponse.json(
+        { success: false, error: 'No tiene permisos para eliminar este elemento.' },
+        { status: 403 }
+      );
+    } else {
+      await logAuthorization(
+        currentUser.username,
+        userAreaName,
+        `Eliminar permanentemente "${nodeName}"`,
+        nodeName,
+        'Permitido'
+      );
+    }
+
+    if (node.areaFolder) {
+      if (currentUser.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Solo los administradores pueden eliminar carpetas principales de área.' }, { status: 403 });
+      }
+    } else {
+      if (currentUser.role !== 'ADMIN' && node.creator !== currentUser.name) {
+        return NextResponse.json({ error: 'No tienes permisos para eliminar este elemento.' }, { status: 403 });
+      }
     }
 
     // Recursive helper to delete children folders/files recursively

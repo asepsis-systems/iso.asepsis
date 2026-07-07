@@ -39,12 +39,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Process File Upload
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+    if (fileExtension !== 'png') {
+      return NextResponse.json({ error: 'Solo se permiten firmas en formato PNG con fondo transparente.' }, { status: 400 });
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
     // Clean and generate filename
-    const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'png';
-    const diskFileName = `sig-${finalUserId}-${Date.now()}.${fileExtension}`;
+    const diskFileName = `sig-${finalUserId}-${Date.now()}.png`;
     let signaturePath = '';
 
     if (supabase) {

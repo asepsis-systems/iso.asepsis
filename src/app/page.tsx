@@ -12,6 +12,7 @@ import {
   Plus,
   Upload,
   ArrowRight,
+  ArrowLeft,
   FileSpreadsheet,
   Download,
   Trash,
@@ -45,6 +46,8 @@ interface ItemNode {
   createdAt: string;
   updatedAt: string;
   parentId?: string | null;
+  areaFolder?: any;
+  document?: any;
 }
 
 interface Breadcrumb {
@@ -57,12 +60,15 @@ interface UserItem {
   username: string;
   name: string;
   role: string;
+  cargo?: string | null;
+  email?: string | null;
+  areaId?: string | null;
   createdAt: string;
 }
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<{ id: string; name: string; username: string; role: string; signature?: string | null } | null>(null);
+  const [user, setUser] = useState<{ id: string; name: string; username: string; role: string; areaId?: string | null; signature?: string | null; cargo?: string | null } | null>(null);
   const [items, setItems] = useState<ItemNode[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
   const [currentParentId, setCurrentParentId] = useState<string | null>(null);
@@ -71,6 +77,234 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [creatorPendingCount, setCreatorPendingCount] = useState<number>(0);
+
+  const [areas, setAreas] = useState<any[]>([]);
+  const [auditList, setAuditList] = useState<any[]>([]);
+  const [isVerifiersModalOpen, setIsVerifiersModalOpen] = useState(false);
+  const [selectedAreaForVerifiers, setSelectedAreaForVerifiers] = useState<any | null>(null);
+  const [areaVerifiersState, setAreaVerifiersState] = useState<{ userId: string; signOrder: number }[]>([]);
+
+  const loadAreas = async () => {
+    try {
+      const res = await fetch('/api/areas');
+      const data = await res.json();
+      if (res.ok && data.areas) {
+        setAreas(data.areas);
+      }
+    } catch (err) {
+      console.error('Error al cargar áreas:', err);
+    }
+  };
+
+  const loadAuditLogs = async () => {
+    try {
+      const res = await fetch('/api/audit');
+      const data = await res.json();
+      if (res.ok && data.audits) {
+        setAuditList(data.audits);
+      }
+    } catch (error) {
+      console.error('Error al cargar auditoría:', error);
+    }
+  };
+
+  const currentArea = areas.find(area => 
+    area.folderNodeId === currentParentId || 
+    breadcrumbs.some(crumb => crumb.id === area.folderNodeId)
+  );
+
+  const canUploadHere = () => {
+    if (!user) return false;
+    return currentFilter === 'all';
+  };
+
+  const canDeleteNode = (item: ItemNode) => {
+    if (!user) return false;
+    
+    // Check if the item is a main area folder
+    const isMainAreaFolder = areas.some(a => a.folderNodeId === item.id);
+    if (isMainAreaFolder) {
+      return user.role === 'ADMIN';
+    }
+    
+    if (user.role === 'ADMIN') return true;
+    return item.creator === user.name;
+  };
+
+  const getAreaColorClasses = (colorName: string | null) => {
+    switch (colorName) {
+      case 'blue':
+        return {
+          bg: 'bg-blue-50/80 border-blue-200 hover:bg-blue-50 hover:border-blue-300',
+          text: 'text-blue-600',
+          icon: 'text-blue-500 fill-blue-500/10',
+          badge: 'bg-blue-100 text-blue-800 border-blue-200'
+        };
+      case 'purple':
+        return {
+          bg: 'bg-purple-50/80 border-purple-200 hover:bg-purple-50 hover:border-purple-300',
+          text: 'text-purple-600',
+          icon: 'text-purple-500 fill-purple-500/10',
+          badge: 'bg-purple-100 text-purple-800 border-purple-200'
+        };
+      case 'emerald':
+        return {
+          bg: 'bg-emerald-50/80 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300',
+          text: 'text-emerald-600',
+          icon: 'text-emerald-500 fill-emerald-500/10',
+          badge: 'bg-emerald-100 text-emerald-800 border-emerald-200'
+        };
+      case 'amber':
+        return {
+          bg: 'bg-amber-50/80 border-amber-200 hover:bg-amber-50 hover:border-amber-300',
+          text: 'text-amber-600',
+          icon: 'text-amber-500 fill-amber-500/10',
+          badge: 'bg-amber-100 text-amber-800 border-amber-200'
+        };
+      default:
+        return {
+          bg: 'bg-white border-slate-200/80 hover:border-brand-200',
+          text: 'text-slate-800',
+          icon: 'text-amber-400 fill-amber-400/20',
+          badge: 'bg-slate-100 text-slate-800 border-slate-200'
+        };
+    }
+  };
+
+  const getVerifierSignatureStatus = (item: ItemNode, verifierUserId: string) => {
+    const doc = (item as any).document;
+    if (!doc || !doc.signatures) return 'PENDIENTE';
+    const sig = doc.signatures.find((s: any) => s.userId === verifierUserId);
+    return sig ? sig.status : 'PENDIENTE';
+  };
+
+  const handleConfigureVerifiersClick = (area: any) => {
+    setSelectedAreaForVerifiers(area);
+    loadUsers();
+    
+    const initialSlots = [
+      { signOrder: 1, userId: '' },
+      { signOrder: 2, userId: '' },
+      { signOrder: 3, userId: '' }
+    ];
+    
+    if (area.verifiers) {
+      area.verifiers.forEach((v: any) => {
+        const slot = initialSlots.find(s => s.signOrder === v.signOrder);
+        if (slot) {
+          slot.userId = v.userId;
+        }
+      });
+    }
+    
+    setAreaVerifiersState(initialSlots);
+    setIsVerifiersModalOpen(true);
+  };
+
+  const handleSaveVerifiers = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAreaForVerifiers) return;
+    
+    const validVerifiers = areaVerifiersState.filter(v => v.userId !== '');
+    if (validVerifiers.length === 0) {
+      alert('Debes seleccionar al menos un verificador.');
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/areas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          areaId: selectedAreaForVerifiers.id,
+          verifiers: validVerifiers
+        })
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        alert('Verificadores configurados con éxito.');
+        setIsVerifiersModalOpen(false);
+        loadAreas();
+        loadItems();
+      } else {
+        alert(data.error || 'Error al guardar verificadores.');
+      }
+    } catch (err) {
+      console.error('Error saving verifiers:', err);
+      alert('Error de red al intentar guardar.');
+    }
+  };
+
+  useEffect(() => {
+    loadAreas();
+  }, []);
+
+  // Drag and Drop States
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+
+  // Drag and Drop Handlers
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedId(id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverFolderId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    if (draggedId !== targetId) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleDragEnter = (targetId: string) => {
+    if (draggedId !== targetId) {
+      setDragOverFolderId(targetId);
+    }
+  };
+
+  const handleDragLeave = (targetId: string) => {
+    if (dragOverFolderId === targetId) {
+      setDragOverFolderId(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolderId: string | null) => {
+    e.preventDefault();
+    setDragOverFolderId(null);
+    setDraggedId(null);
+
+    const draggedItemId = e.dataTransfer.getData('text/plain');
+    if (!draggedItemId) return;
+    if (draggedItemId === targetFolderId) return;
+
+    try {
+      const res = await fetch('/api/files', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: draggedItemId,
+          parentId: targetFolderId === 'root' ? null : targetFolderId,
+        }),
+      });
+
+      if (res.ok) {
+        loadItems();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Error al mover el elemento.');
+      }
+    } catch (err) {
+      console.error('Error al mover elemento:', err);
+      alert('Error de red al intentar mover el elemento.');
+    }
+  };
 
   const loadPendingCounts = async (currentUser?: typeof user) => {
     const activeUser = currentUser || user;
@@ -108,12 +342,18 @@ export default function Dashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('CREATOR');
+  const [newCargo, setNewCargo] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newAreaId, setNewAreaId] = useState('');
   const [userError, setUserError] = useState('');
   const [editUserItem, setEditUserItem] = useState<UserItem | null>(null);
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState('CREATOR');
+  const [editCargo, setEditCargo] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editAreaId, setEditAreaId] = useState('');
   const [editUserError, setEditUserError] = useState('');
   
   // Modals & Overlays
@@ -154,6 +394,7 @@ export default function Dashboard() {
     verifier3Signature?: string | null;
     canSign: boolean;
     canTrash: boolean;
+    isApproved: boolean;
   }>({
     isOpen: false,
     id: '',
@@ -170,7 +411,8 @@ export default function Dashboard() {
     verifier2Signature: null,
     verifier3Signature: null,
     canSign: false,
-    canTrash: false
+    canTrash: false,
+    isApproved: false
   });
 
   // Profile modal states
@@ -241,6 +483,9 @@ export default function Dashboard() {
           password: newPassword,
           name: newName.trim(),
           role: newRole,
+          cargo: newCargo.trim() || undefined,
+          email: newEmail.trim() || undefined,
+          areaId: newAreaId || null,
         }),
       });
 
@@ -250,6 +495,9 @@ export default function Dashboard() {
         setNewPassword('');
         setNewName('');
         setNewRole('CREATOR');
+        setNewCargo('');
+        setNewEmail('');
+        setNewAreaId('');
         setIsUserModalOpen(false);
         loadUsers();
       } else {
@@ -312,6 +560,9 @@ export default function Dashboard() {
           username: editUsername.trim().toLowerCase(),
           password: editPassword.trim() || undefined,
           role: editRole,
+          cargo: editCargo.trim() || null,
+          email: editEmail.trim() || null,
+          areaId: editAreaId || null,
         }),
       });
 
@@ -321,6 +572,9 @@ export default function Dashboard() {
         setEditUsername('');
         setEditPassword('');
         setEditRole('CREATOR');
+        setEditCargo('');
+        setEditEmail('');
+        setEditAreaId('');
         setEditUserItem(null);
         loadUsers();
       } else {
@@ -367,6 +621,8 @@ export default function Dashboard() {
     if (user) {
       if (currentFilter === 'users') {
         loadUsers();
+      } else if (currentFilter === 'audit') {
+        loadAuditLogs();
       } else {
         loadItems();
       }
@@ -432,6 +688,10 @@ export default function Dashboard() {
   // Upload file trigger
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    if (!canUploadHere()) {
+      alert('Solo puedes subir archivos dentro de tu área asignada.');
+      return;
+    }
     const file = files[0];
 
     const formData = new FormData();
@@ -458,18 +718,48 @@ export default function Dashboard() {
   // Helper: Check if current user can sign the file
   const canUserSign = (item: ItemNode) => {
     if (!user || item.type !== 'FILE' || item.isTrashed) return false;
-    // Creator cannot verify
-    if (item.creator === user.name) return false;
-    // Cannot sign twice
-    const userNormalized = user.name?.trim().toLowerCase();
-    const alreadySigned = 
-      item.verifier1?.trim().toLowerCase() === userNormalized || 
-      item.verifier2?.trim().toLowerCase() === userNormalized || 
-      item.verifier3?.trim().toLowerCase() === userNormalized;
-    if (alreadySigned) return false;
-    // Check if fully signed
-    const signedCount = [item.verifier1, item.verifier2, item.verifier3].filter(Boolean).length;
-    if (signedCount >= 3) return false;
+    
+    // Get the document record
+    const doc = (item as any).document;
+    if (!doc) {
+      // Fallback for legacy files: use old verifiers logic
+      if (item.creator === user.name) return false;
+      const userNormalized = user.name?.trim().toLowerCase();
+      const alreadySigned = 
+        item.verifier1?.trim().toLowerCase() === userNormalized || 
+        item.verifier2?.trim().toLowerCase() === userNormalized || 
+        item.verifier3?.trim().toLowerCase() === userNormalized;
+      if (alreadySigned) return false;
+      const signedCount = [item.verifier1, item.verifier2, item.verifier3].filter(Boolean).length;
+      if (signedCount >= 3) return false;
+      return true;
+    }
+    
+    // Reject flow: if document is rejected or approved, nobody can sign
+    if (doc.status === 'APROBADO' || doc.status === 'RECHAZADO') return false;
+    
+    // Find the area for this document
+    const docArea = areas.find(a => a.id === doc.areaId);
+    if (!docArea) return false;
+    
+    // Find if the current user is a verifier in this area
+    const myVerifier = docArea.verifiers?.find((v: any) => v.userId === user.id);
+    if (!myVerifier) return false;
+    
+    // Check if the current user already signed
+    const mySig = doc.signatures?.find((s: any) => s.userId === user.id);
+    if (mySig && mySig.status !== 'PENDIENTE') return false;
+    
+    // Check if previous verifiers in the order have signed (status === 'APROBADO')
+    const myOrder = myVerifier.signOrder;
+    for (const v of docArea.verifiers || []) {
+      if (v.signOrder < myOrder) {
+        const prevSig = doc.signatures?.find((s: any) => s.userId === v.userId);
+        if (!prevSig || prevSig.status !== 'APROBADO') {
+          return false; // A previous verifier has not approved yet
+        }
+      }
+    }
     
     return true;
   };
@@ -497,7 +787,10 @@ export default function Dashboard() {
         verifier2Signature: (item as any).verifier2Signature || null,
         verifier3Signature: (item as any).verifier3Signature || null,
         canSign: canUserSign(item),
-        canTrash: !item.isTrashed && user !== null && (item.creator === user.name || user.role === 'ADMIN')
+        canTrash: !item.isTrashed && user !== null && (item.creator === user.name || user.role === 'ADMIN'),
+        isApproved: item.document
+          ? item.document.status === 'APROBADO'
+          : (!!item.verifier1 && !!item.verifier2 && !!item.verifier3)
       });
     }
   };
@@ -643,6 +936,10 @@ export default function Dashboard() {
         const isV2 = updated.verifier2 === user?.name && !previewFile.verifier2;
         const isV3 = updated.verifier3 === user?.name && !previewFile.verifier3;
 
+        const isApprovedNow = updated.document
+          ? updated.document.status === 'APROBADO'
+          : (!!updated.verifier1 && !!updated.verifier2 && !!updated.verifier3);
+
         setPreviewFile(prev => ({
           ...prev,
           verifier1: updated.verifier1,
@@ -651,7 +948,8 @@ export default function Dashboard() {
           verifier1Signature: isV1 ? user?.signature : prev.verifier1Signature,
           verifier2Signature: isV2 ? user?.signature : prev.verifier2Signature,
           verifier3Signature: isV3 ? user?.signature : prev.verifier3Signature,
-          canSign: false // Once signed, they cannot sign again!
+          canSign: false, // Once signed, they cannot sign again!
+          isApproved: isApprovedNow
         }));
       }
     } catch (err) {
@@ -681,6 +979,10 @@ export default function Dashboard() {
   // Get matching icon for file types
   const getFileIcon = (item: ItemNode) => {
     if (item.type === 'FOLDER') {
+      if ((item as any).areaFolder) {
+        const classes = getAreaColorClasses((item as any).areaFolder.color);
+        return <Folder className={clsx("w-8 h-8", classes.icon)} />;
+      }
       return <Folder className="w-8 h-8 text-amber-400 fill-amber-400/20" />;
     }
     const ext = item.name.split('.').pop()?.toLowerCase();
@@ -729,8 +1031,20 @@ export default function Dashboard() {
         setCurrentFilter={setCurrentFilter}
         setCurrentParentId={setCurrentParentId}
         totalStorageUsed={totalStorageUsed}
-        onNewFolder={() => setIsFolderModalOpen(true)}
-        onUploadClick={() => fileInputRef.current?.click()}
+        onNewFolder={() => {
+          if (currentFilter !== 'all') {
+            alert('Solo puedes crear carpetas dentro de la vista de archivos.');
+            return;
+          }
+          setIsFolderModalOpen(true);
+        }}
+        onUploadClick={() => {
+          if (!canUploadHere()) {
+            alert('Solo puedes subir archivos dentro de la vista de archivos.');
+            return;
+          }
+          fileInputRef.current?.click();
+        }}
         user={user}
         pendingCount={pendingCount}
         creatorPendingCount={creatorPendingCount}
@@ -756,9 +1070,32 @@ export default function Dashboard() {
           {/* Breadcrumbs Navigation Path */}
           {currentFilter === 'all' && (
             <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mb-6 flex-wrap">
+              {currentParentId !== null && (
+                <button
+                  onClick={() => {
+                    if (breadcrumbs.length <= 1) {
+                      setCurrentParentId(null);
+                    } else {
+                      setCurrentParentId(breadcrumbs[breadcrumbs.length - 2].id);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md hover:shadow-lg mr-2 text-[11px] font-bold active:scale-95 duration-200 border border-transparent"
+                  title="Retroceder"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-white" />
+                  <span>Atrás</span>
+                </button>
+              )}
               <button 
                 onClick={() => setCurrentParentId(null)}
-                className="hover:text-brand-600 hover:underline transition-colors"
+                onDragOver={(e) => handleDragOver(e, 'root')}
+                onDragEnter={() => handleDragEnter('root')}
+                onDragLeave={() => handleDragLeave('root')}
+                onDrop={(e) => handleDrop(e, 'root')}
+                className={clsx(
+                  "hover:text-brand-600 hover:underline transition-all duration-200 px-2 py-1 rounded-lg border border-transparent",
+                  dragOverFolderId === 'root' && "bg-brand-50 border-brand-300 text-brand-600 shadow-sm"
+                )}
               >
                 Mi Unidad
               </button>
@@ -767,9 +1104,14 @@ export default function Dashboard() {
                   <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <button
                     onClick={() => setCurrentParentId(crumb.id)}
+                    onDragOver={(e) => handleDragOver(e, crumb.id)}
+                    onDragEnter={() => handleDragEnter(crumb.id)}
+                    onDragLeave={() => handleDragLeave(crumb.id)}
+                    onDrop={(e) => handleDrop(e, crumb.id)}
                     className={clsx(
-                      "hover:text-brand-600 hover:underline transition-colors truncate max-w-[120px]",
-                      idx === breadcrumbs.length - 1 && "text-slate-800 font-bold"
+                      "hover:text-brand-600 hover:underline transition-all duration-200 truncate max-w-[120px] px-2 py-1 rounded-lg border border-transparent",
+                      idx === breadcrumbs.length - 1 && "text-slate-800 font-bold",
+                      dragOverFolderId === crumb.id && "bg-brand-50 border-brand-300 text-brand-600 shadow-sm"
                     )}
                   >
                     {crumb.name}
@@ -834,6 +1176,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-800">
               {currentFilter === 'users' ? 'Gestión de Usuarios' :
+               currentFilter === 'audit' ? 'Auditoría de Acciones' :
                currentFilter === 'recent' ? 'Archivos Recientes' : 
                currentFilter === 'starred' ? 'Destacados' :
                currentFilter === 'trash' ? 'Papelera de Reciclaje' : 
@@ -864,6 +1207,9 @@ export default function Dashboard() {
                     <th className="p-4 w-12 text-center">Icono</th>
                     <th className="p-4 text-slate-700 font-bold text-sm">Nombre Completo</th>
                     <th className="p-4 text-slate-700 font-bold text-sm">Nombre de Usuario</th>
+                    <th className="p-4 text-slate-700 font-bold text-sm">Cargo</th>
+                    <th className="p-4 text-slate-700 font-bold text-sm">Correo Electrónico</th>
+                    <th className="p-4 text-slate-700 font-bold text-sm">Área de Trabajo</th>
                     <th className="p-4 w-32">Rol</th>
                     <th className="p-4 w-40">Fecha de Creación</th>
                     <th className="p-4 w-20 text-center">Acciones</th>
@@ -882,6 +1228,11 @@ export default function Dashboard() {
                       </td>
                       <td className="p-4 font-bold text-slate-800 text-sm">{u.name}</td>
                       <td className="p-4 text-slate-600 font-semibold">{u.username}</td>
+                      <td className="p-4 text-slate-600 font-semibold">{u.cargo || <span className="text-slate-400 italic">No asignado</span>}</td>
+                      <td className="p-4 text-slate-600 font-semibold">{u.email || <span className="text-slate-400 italic">No asignado</span>}</td>
+                      <td className="p-4 text-slate-600 font-semibold">
+                        {areas.find(a => a.id === u.areaId)?.name || <span className="text-slate-400 italic">General</span>}
+                      </td>
                       <td className="p-4">
                         <span className={clsx(
                           "px-2.5 py-1 rounded-full text-[10px] font-bold border inline-block",
@@ -902,6 +1253,9 @@ export default function Dashboard() {
                               setEditName(u.name);
                               setEditUsername(u.username);
                               setEditRole(u.role);
+                              setEditCargo(u.cargo || '');
+                              setEditEmail(u.email || '');
+                              setEditAreaId(u.areaId || '');
                               setEditPassword('');
                               setEditUserError('');
                             }}
@@ -929,6 +1283,97 @@ export default function Dashboard() {
                 </tbody>
               </table>
             </div>
+          ) : currentFilter === 'audit' ? (
+            <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-premium">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                    <th className="p-4 w-44 text-slate-700 font-bold text-sm">Fecha/Hora</th>
+                    <th className="p-4 w-36 text-slate-700 font-bold text-sm">Usuario</th>
+                    <th className="p-4 w-52 text-slate-700 font-bold text-sm">Acción</th>
+                    <th className="p-4 text-slate-700 font-bold text-sm">Detalles</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditList.map((log) => (
+                    <tr 
+                      key={log.id}
+                      className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+                    >
+                      <td className="p-4 text-slate-400 font-semibold">{new Date(log.createdAt).toLocaleString('es-ES')}</td>
+                      <td className="p-4 font-bold text-slate-800 text-sm">{log.username}</td>
+                      <td className="p-4">
+                        <span className={clsx(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold border inline-block uppercase",
+                          log.action.includes('VERIFY') || log.action.includes('APROBADO') || log.action.includes('FIRMA') ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
+                          log.action.includes('RECHAZADO') || log.action.includes('ELIMINAR') || log.action.includes('DELETE') ? "bg-rose-50 text-rose-600 border-rose-200" :
+                          "bg-blue-50 text-blue-600 border-blue-200"
+                        )}>
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="p-4 text-slate-600 font-medium">
+                        {(() => {
+                          try {
+                            const parsed = JSON.parse(log.detail);
+                            if (parsed && typeof parsed === 'object') {
+                              return (
+                                <div className="flex flex-col gap-1.5 bg-slate-50 border border-slate-100 p-3 rounded-xl max-w-lg shadow-xs">
+                                  <div className="font-semibold text-slate-800 text-sm">{parsed.message || 'Firma procesada.'}</div>
+                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-500 font-medium mt-1">
+                                    {parsed.documentName && (
+                                      <div>
+                                        <span className="text-slate-400 font-semibold">Documento:</span> {parsed.documentName}
+                                      </div>
+                                    )}
+                                    {parsed.ip && (
+                                      <div>
+                                        <span className="text-slate-400 font-semibold">Dirección IP:</span> {parsed.ip}
+                                      </div>
+                                    )}
+                                    {parsed.status && (
+                                      <div>
+                                        <span className="text-slate-400 font-semibold">Estado:</span>{' '}
+                                        <span className={clsx(
+                                          "px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase inline-block",
+                                          parsed.status === 'APROBADO' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                                          parsed.status === 'RECHAZADO' ? "bg-rose-50 text-rose-600 border-rose-100" :
+                                          "bg-amber-50 text-amber-600 border-amber-100"
+                                        )}>
+                                          {parsed.status}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {parsed.sha256 && (
+                                    <div className="text-[10px] text-slate-500 border-t border-slate-200/60 pt-1.5 mt-1">
+                                      <span className="text-slate-400 font-bold block mb-0.5">HASH SHA-256:</span>
+                                      <code className="bg-slate-100/80 border border-slate-200/50 px-1.5 py-0.5 rounded text-[9.5px] text-slate-600 font-mono break-all block">
+                                        {parsed.sha256}
+                                      </code>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                          } catch (e) {
+                            // Ignorar error de parseo y renderizar normal
+                          }
+                          return log.detail;
+                        })()}
+                      </td>
+                    </tr>
+                  ))}
+                  {auditList.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-slate-400">
+                        No hay registros de auditoría disponibles.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           ) : items.length === 0 ? (
             <div className="h-[50vh] rounded-3xl border border-dashed border-slate-200/80 bg-white/40 backdrop-blur-xs flex flex-col items-center justify-center p-8 text-center">
               <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4 shadow-inner">
@@ -947,8 +1392,22 @@ export default function Dashboard() {
                 {items.map((item) => (
                   <div
                     key={item.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, item.id)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={item.type === 'FOLDER' ? (e) => handleDragOver(e, item.id) : undefined}
+                    onDragEnter={item.type === 'FOLDER' ? () => handleDragEnter(item.id) : undefined}
+                    onDragLeave={item.type === 'FOLDER' ? () => handleDragLeave(item.id) : undefined}
+                    onDrop={item.type === 'FOLDER' ? (e) => handleDrop(e, item.id) : undefined}
                     onDoubleClick={() => handleItemDoubleClick(item)}
-                    className="group bg-white rounded-2xl border border-slate-200/80 hover:border-brand-200 hover:shadow-premium hover:-translate-y-0.5 p-4 flex flex-col gap-3 relative transition-all duration-300 cursor-pointer select-none"
+                    className={clsx(
+                      "group rounded-2xl border hover:shadow-premium hover:-translate-y-0.5 p-4 flex flex-col gap-3 relative transition-all duration-300 cursor-pointer select-none",
+                      dragOverFolderId === item.id 
+                        ? "border-brand-500 bg-brand-50/50 scale-[1.02] shadow-md ring-2 ring-brand-500/20" 
+                        : item.type === 'FOLDER' && item.areaFolder
+                          ? getAreaColorClasses((item.areaFolder as any).color).bg
+                          : "bg-white border-slate-200/80 hover:border-brand-200"
+                    )}
                   >
                     {/* Item action controls */}
                     <div className="flex justify-between items-start gap-1">
@@ -970,11 +1429,11 @@ export default function Dashboard() {
                           </button>
                         )}
 
-                        {!item.isTrashed && user && (item.creator === user.name || user.role === 'ADMIN') && (
+                        {!item.isTrashed && canDeleteNode(item) && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm('¿Estás seguro de que deseas mover este archivo a la papelera?')) {
+                              if (confirm(item.type === 'FOLDER' ? '¿Estás seguro de que deseas mover esta carpeta a la papelera?' : '¿Estás seguro de que deseas mover este archivo a la papelera?')) {
                                 handleTrashToggle(item);
                               }
                             }}
@@ -1066,43 +1525,58 @@ export default function Dashboard() {
                                 <Edit3 className="w-3.5 h-3.5 text-slate-400" />
                                 <span>Editar Detalles</span>
                               </button>
-                              {item.isTrashed ? (
-                                <>
+                              {item.type === 'FOLDER' && item.areaFolder && user?.role === 'ADMIN' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleConfigureVerifiersClick(item.areaFolder);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full text-left px-4 py-2 hover:bg-brand-50 hover:text-brand-600 text-brand-700 font-bold transition-colors flex items-center gap-2 border-b border-slate-100"
+                                >
+                                  <Users className="w-3.5 h-3.5 text-brand-500" />
+                                  <span>Configurar Verificadores</span>
+                                </button>
+                              )}
+                              {canDeleteNode(item) && (
+                                item.isTrashed ? (
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleTrashToggle(item);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 transition-colors flex items-center gap-2"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5 text-indigo-500" />
+                                      <span>Restaurar</span>
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handlePermanentDelete(item.id);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                      <span>Eliminar para siempre</span>
+                                    </button>
+                                  </>
+                                ) : (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleTrashToggle(item);
                                       setActiveMenuId(null);
                                     }}
-                                    className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 transition-colors flex items-center gap-2"
-                                  >
-                                    <RotateCcw className="w-3.5 h-3.5 text-indigo-500" />
-                                    <span>Restaurar</span>
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handlePermanentDelete(item.id);
-                                      setActiveMenuId(null);
-                                    }}
                                     className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
                                   >
                                     <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                    <span>Eliminar para siempre</span>
+                                    <span>Mover a papelera</span>
                                   </button>
-                                </>
-                              ) : (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTrashToggle(item);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                  <span>Mover a papelera</span>
-                                </button>
+                                )
                               )}
                             </div>
                           )}
@@ -1112,9 +1586,21 @@ export default function Dashboard() {
 
                     {/* Metadata Card Footer */}
                     <div className="flex-1 flex flex-col justify-end">
-                      <h4 className="font-bold text-xs text-slate-800 line-clamp-2 truncate" title={item.name}>
+                      <h4 className={clsx(
+                        "font-bold text-xs line-clamp-2 truncate",
+                        item.type === 'FOLDER' && item.areaFolder 
+                          ? getAreaColorClasses((item.areaFolder as any).color).text 
+                          : "text-slate-800"
+                      )} title={item.name}>
                         {item.name}
                       </h4>
+                      {item.type === 'FOLDER' && item.areaFolder && (
+                        <div className="mt-1">
+                          <span className={clsx("px-1.5 py-0.5 rounded-md text-[9px] font-bold border inline-block", getAreaColorClasses((item.areaFolder as any).color).badge)}>
+                            Carpeta de Área
+                          </span>
+                        </div>
+                      )}
                       {item.type === 'FILE' && (() => {
                         const status = getVerificationStatus(item);
                         if (!status) return null;
@@ -1144,28 +1630,48 @@ export default function Dashboard() {
             ) : (
               
               /* VIEW MODE: LIST (Lista) */
-              <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-premium">
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-premium">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                      <th className="p-4 w-12 text-center">Tipo</th>
+                      <th className="p-4 w-12 text-center rounded-tl-2xl">Tipo</th>
                       <th className="p-4 text-slate-700 font-bold text-sm">Nombre</th>
                       <th className="p-4 w-28">Estado</th>
                       <th className="p-4 w-32">Fecha de Creación</th>
                       <th className="p-4 w-28">Elaborado <><br />por</></th>
-                      <th className="p-4 w-24">Verificador 1</th>
-                      <th className="p-4 w-24">Verificador 2</th>
-                      <th className="p-4 w-24">Verificador 3</th>
+                      {currentArea ? (
+                        <th className="p-4 w-48 text-slate-700 font-bold text-sm">Flujo de Firmas ({currentArea.name})</th>
+                      ) : (
+                        <>
+                          <th className="p-4 w-24">Verificador 1</th>
+                          <th className="p-4 w-24">Verificador 2</th>
+                          <th className="p-4 w-24">Verificador 3</th>
+                        </>
+                      )}
                       <th className="p-4 w-24">Tamaño</th>
-                      <th className="p-4 w-20 text-center">Acciones</th>
+                      <th className="p-4 w-20 text-center rounded-tr-2xl">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
                       <tr 
                         key={item.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, item.id)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={item.type === 'FOLDER' ? (e) => handleDragOver(e, item.id) : undefined}
+                        onDragEnter={item.type === 'FOLDER' ? () => handleDragEnter(item.id) : undefined}
+                        onDragLeave={item.type === 'FOLDER' ? () => handleDragLeave(item.id) : undefined}
+                        onDrop={item.type === 'FOLDER' ? (e) => handleDrop(e, item.id) : undefined}
                         onDoubleClick={() => handleItemDoubleClick(item)}
-                        className="border-b border-slate-100 hover:bg-slate-50/50 cursor-pointer select-none transition-colors group"
+                        className={clsx(
+                          "border-b cursor-pointer select-none transition-all duration-200 group",
+                          dragOverFolderId === item.id 
+                            ? "bg-brand-50 border-brand-300 shadow-inner font-semibold" 
+                            : item.type === 'FOLDER' && item.areaFolder
+                              ? getAreaColorClasses((item.areaFolder as any).color).bg.split(' ')[0] + " border-slate-100 hover:bg-slate-50/50"
+                              : "border-slate-100 hover:bg-slate-50/50"
+                        )}
                       >
                         <td className="p-4 flex justify-center">
                           <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors">
@@ -1193,9 +1699,39 @@ export default function Dashboard() {
                         </td>
                         <td className="p-4 text-slate-400 font-semibold">{formatDate(item.createdAt)}</td>
                         <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.creator || '-'}</td>
-                        <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier1 || '-'}</td>
-                        <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier2 || '-'}</td>
-                        <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier3 || '-'}</td>
+                        {currentArea ? (
+                          <td className="p-4">
+                            {item.type === 'FILE' && (
+                              <div className="flex flex-col gap-1">
+                                {currentArea.verifiers.map((v: any) => {
+                                  const status = getVerifierSignatureStatus(item, v.userId);
+                                  return (
+                                    <div key={v.id} className="flex items-center gap-1.5">
+                                      <span className={clsx(
+                                        "w-2 h-2 rounded-full shrink-0",
+                                        status === 'APROBADO' ? "bg-emerald-500" :
+                                        status === 'RECHAZADO' ? "bg-rose-500" : "bg-slate-300"
+                                      )} />
+                                      <span className={clsx(
+                                        "text-[10px] font-semibold",
+                                        status === 'APROBADO' ? "text-emerald-700 font-bold" :
+                                        status === 'RECHAZADO' ? "text-rose-700 font-bold" : "text-slate-500"
+                                      )}>
+                                        {v.user.name} ({status === 'APROBADO' ? 'Firmado' : status === 'RECHAZADO' ? 'Rechazado' : 'Pendiente'})
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+                        ) : (
+                          <>
+                            <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier1 || '-'}</td>
+                            <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier2 || '-'}</td>
+                            <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier3 || '-'}</td>
+                          </>
+                        )}
                         <td className="p-4 text-slate-400 font-semibold">{item.type === 'FOLDER' ? 'Carpeta' : formatSize(item.size)}</td>
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
@@ -1213,11 +1749,11 @@ export default function Dashboard() {
                               </button>
                             )}
 
-                            {!item.isTrashed && user && (item.creator === user.name || user.role === 'ADMIN') && (
+                            {!item.isTrashed && canDeleteNode(item) && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (confirm('¿Estás seguro de que deseas mover este archivo a la papelera?')) {
+                                  if (confirm(item.type === 'FOLDER' ? '¿Estás seguro de que deseas mover esta carpeta a la papelera?' : '¿Estás seguro de que deseas mover este archivo a la papelera?')) {
                                     handleTrashToggle(item);
                                   }
                                 }}
@@ -1308,43 +1844,58 @@ export default function Dashboard() {
                                     <Edit3 className="w-3.5 h-3.5 text-slate-400" />
                                     <span>Editar Detalles</span>
                                   </button>
-                                  {item.isTrashed ? (
-                                    <>
+                                  {item.type === 'FOLDER' && item.areaFolder && user?.role === 'ADMIN' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleConfigureVerifiersClick(item.areaFolder);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 hover:bg-brand-50 hover:text-brand-600 text-brand-700 font-bold transition-colors flex items-center gap-2 border-b border-slate-100"
+                                    >
+                                      <Users className="w-3.5 h-3.5 text-brand-500" />
+                                      <span>Configurar Verificadores</span>
+                                    </button>
+                                  )}
+                                  {canDeleteNode(item) && (
+                                    item.isTrashed ? (
+                                      <>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleTrashToggle(item);
+                                            setActiveMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 transition-colors flex items-center gap-2"
+                                        >
+                                          <RotateCcw className="w-3.5 h-3.5 text-indigo-500" />
+                                          <span>Restaurar</span>
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handlePermanentDelete(item.id);
+                                            setActiveMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                          <span>Eliminar definitivamente</span>
+                                        </button>
+                                      </>
+                                    ) : (
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleTrashToggle(item);
                                           setActiveMenuId(null);
                                         }}
-                                        className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 transition-colors flex items-center gap-2"
-                                      >
-                                        <RotateCcw className="w-3.5 h-3.5 text-indigo-500" />
-                                        <span>Restaurar</span>
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handlePermanentDelete(item.id);
-                                          setActiveMenuId(null);
-                                        }}
                                         className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
                                       >
                                         <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                        <span>Eliminar definitivamente</span>
+                                        <span>Mover a papelera</span>
                                       </button>
-                                    </>
-                                  ) : (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleTrashToggle(item);
-                                        setActiveMenuId(null);
-                                      }}
-                                      className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                      <span>Mover a papelera</span>
-                                    </button>
+                                    )
                                   )}
                                 </div>
                               )}
@@ -1539,6 +2090,7 @@ export default function Dashboard() {
         verifier2Signature={previewFile.verifier2Signature}
         verifier3Signature={previewFile.verifier3Signature}
         canSign={previewFile.canSign}
+        isApproved={previewFile.isApproved}
         currentUserName={user?.name}
         currentUserSignature={user?.signature}
         onVerify={(placement, annotations) => {
@@ -1569,11 +2121,33 @@ export default function Dashboard() {
               verifier1: data.node.verifier1,
               verifier2: data.node.verifier2,
               verifier3: data.node.verifier3,
-              canSign: true // Allow signing again
+              canSign: true, // Allow signing again
+              isApproved: false
             }));
           } catch (err) {
             console.error('Error al remover firma:', err);
             alert('Error de red al intentar remover tu firma.');
+          }
+        }}
+        onReject={async () => {
+          if (!confirm('¿Estás seguro de que deseas rechazar este documento?')) return;
+          try {
+            const res = await fetch('/api/files/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fileId: previewFile.id, action: 'reject' })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              alert(data.error || 'Ocurrió un error al rechazar el archivo.');
+              return;
+            }
+            alert(data.message || 'El documento ha sido rechazado con éxito.');
+            loadItems();
+            setPreviewFile(prev => ({ ...prev, isOpen: false }));
+          } catch (err) {
+            console.error('Error al rechazar:', err);
+            alert('Error de red al intentar rechazar el archivo.');
           }
         }}
         canTrash={previewFile.canTrash}
@@ -1649,6 +2223,39 @@ export default function Dashboard() {
                   <option value="ADMIN">Administrador (Gestión total)</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Cargo Profesional</label>
+                <input
+                  type="text"
+                  value={editCargo}
+                  onChange={(e) => setEditCargo(e.target.value)}
+                  placeholder="Ej: Gerente de Operaciones / Jefe de Control"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Correo Electrónico</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="Ej: usuario@asepsis.pe"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Área de Trabajo</label>
+                <select
+                  value={editAreaId}
+                  onChange={(e) => setEditAreaId(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"
+                >
+                  <option value="">Sin área asignada / General</option>
+                  {areas.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1658,6 +2265,9 @@ export default function Dashboard() {
                     setEditUsername('');
                     setEditPassword('');
                     setEditRole('CREATOR');
+                    setEditCargo('');
+                    setEditEmail('');
+                    setEditAreaId('');
                     setEditUserError('');
                   }}
                   className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-semibold transition-colors"
@@ -1732,6 +2342,39 @@ export default function Dashboard() {
                   <option value="ADMIN">Administrador (Gestión total)</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Cargo Profesional</label>
+                <input
+                  type="text"
+                  value={newCargo}
+                  onChange={(e) => setNewCargo(e.target.value)}
+                  placeholder="Ej: Asistente Administrativo / Jefe de Logística"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Correo Electrónico</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="Ej: nuevo.usuario@asepsis.pe"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Área de Trabajo</label>
+                <select
+                  value={newAreaId}
+                  onChange={(e) => setNewAreaId(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"
+                >
+                  <option value="">Sin área asignada / General</option>
+                  {areas.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1742,6 +2385,9 @@ export default function Dashboard() {
                     setNewUsername('');
                     setNewPassword('');
                     setNewRole('CREATOR');
+                    setNewCargo('');
+                    setNewEmail('');
+                    setNewAreaId('');
                   }}
                   className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-semibold transition-colors"
                 >
@@ -1794,6 +2440,16 @@ export default function Dashboard() {
                   <span className="text-slate-800 font-mono">{user.username}</span>
                 </div>
                 <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-400">Cargo Profesional:</span>
+                  <span className="text-slate-800">{user.cargo || 'No asignado'}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-400">Área de Trabajo:</span>
+                  <span className="text-slate-800">
+                    {areas.find(a => a.id === user.areaId)?.name || 'General / Global'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold">
                   <span className="text-slate-400">Rol asignado:</span>
                   <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-brand-50 text-brand-600 border-brand-200 uppercase">
                     {user.role === 'ADMIN' ? 'Administrador' : user.role === 'CREATOR' ? 'Creador' : 'Verificador'}
@@ -1803,13 +2459,13 @@ export default function Dashboard() {
 
               {/* Signature Upload / Dropzone */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">Imagen de tu Firma Digital</label>
+                <label className="block text-xs font-bold text-slate-500 mb-2">Mi Firma</label>
                 
                 {user.signature && !profileSignatureFile && (
                   <div className="mb-3 p-3 bg-white rounded-2xl border border-slate-200/60 shadow-inner flex flex-col items-center justify-center relative group">
                     <img 
                       src={user.signature} 
-                      alt="Tu firma digital" 
+                      alt="Mi firma" 
                       className="max-h-16 object-contain mix-blend-multiply" 
                     />
                     <span className="text-[9px] text-slate-400 font-semibold mt-1">Firma activa</span>
@@ -1819,10 +2475,18 @@ export default function Dashboard() {
                 <div className="border border-dashed border-slate-300 rounded-2xl p-4 text-center bg-slate-50/50 hover:bg-slate-50 transition-all cursor-pointer relative">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/png"
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
-                        setProfileSignatureFile(e.target.files[0]);
+                        const selectedFile = e.target.files[0];
+                        const ext = selectedFile.name.split('.').pop()?.toLowerCase();
+                        if (ext !== 'png') {
+                          alert('Error: Solo se permiten firmas en formato PNG con fondo transparente.');
+                          e.target.value = ''; // Reset input
+                          setProfileSignatureFile(null);
+                          return;
+                        }
+                        setProfileSignatureFile(selectedFile);
                       }
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer"
@@ -1836,8 +2500,8 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <div>
-                        <p className="text-xs font-bold text-slate-600">Sube una nueva firma digital</p>
-                        <p className="text-[9px] text-slate-400 font-medium mt-0.5">PNG o JPG con fondo transparente</p>
+                        <p className="text-xs font-bold text-slate-600">Sube tu firma</p>
+                        <p className="text-[9px] text-slate-400 font-medium mt-0.5">Solo formato PNG con fondo transparente</p>
                       </div>
                     )}
                   </div>
@@ -1903,6 +2567,75 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Configurar Verificadores de Área */}
+      {isVerifiersModalOpen && selectedAreaForVerifiers && (
+        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 text-base">
+                Verificadores: {selectedAreaForVerifiers.name}
+              </h3>
+              <button 
+                onClick={() => setIsVerifiersModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveVerifiers} className="space-y-4">
+              <p className="text-xs text-slate-400 font-medium">
+                Configura el orden secuencial de las firmas de aprobación (1 → 2 → 3).
+              </p>
+              
+              {[1, 2, 3].map((order) => {
+                const currentSlot = areaVerifiersState.find(s => s.signOrder === order);
+                return (
+                  <div key={order} className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-500">
+                      Firmante {order} {order === 1 ? '(Primer Verificador)' : order === 3 ? '(Último Aprobador)' : '(Segundo Verificador)'}
+                    </label>
+                    <select
+                      value={currentSlot?.userId || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAreaVerifiersState(prev => prev.map(s => 
+                          s.signOrder === order ? { ...s, userId: val } : s
+                        ));
+                      }}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"
+                    >
+                      <option value="">-- Seleccionar Usuario --</option>
+                      {usersList.filter(u => u.role === 'VERIFIER' || u.role === 'ADMIN').map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.role === 'ADMIN' ? 'Admin' : 'Verificador'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+              
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsVerifiersModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-slate-500 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-colors"
+                >
+                  Guardar Configuración
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

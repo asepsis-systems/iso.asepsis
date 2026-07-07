@@ -1,60 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 model Node {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   name       String
-  type       String   // "FOLDER" or "FILE"
-  mimeType   String?  // e.g. application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document
-  size       Int?     // Size in bytes (null for folders)
-  path       String?  // Server local storage path (null for folders)
-  isTrashed  Boolean  @default(false)
-  isStarred  Boolean  @default(false)
-  creator    String?  // Creador
-  verifier1  String?  // Verificador 1
-  verifier2  String?  // Verificador 2
-  verifier3  String?  // Verificador 3
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  
-  // Hierarchical relationship for nested folders
+  type       String
+  mimeType   String?
+  size       Int?
+  path       String?
+  isTrashed  Boolean   @default(false)
+  isStarred  Boolean   @default(false)
+  creator    String?
+  verifier1  String?
+  verifier2  String?
+  verifier3  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
   parentId   String?
-  parent     Node?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children   Node[]   @relation("FolderHierarchy")
-
-  // Relaciones del módulo de áreas
   areaFolder Area?     @relation("AreaFolderNode")
   document   Document? @relation("DocumentNode")
+  parent     Node?     @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Node[]    @relation("FolderHierarchy")
 
   @@index([parentId])
 }
 
 model User {
-  id        String    @id @default(uuid())
-  username  String    @unique
-  password  String    // Hashed password
-  name      String
-  role      String    // e.g. "CREATOR", "VERIFIER", "ADMIN"
-  signature String?   // Path to digital signature image
-  cargo     String?   // Cargo de la persona
-  email     String?   // Correo electrónico
-  sessions  Session[]
-  
-  // Relaciones del módulo de áreas
+  id         String      @id @default(uuid())
+  username   String      @unique
+  password   String
+  name       String
+  role       String
+  signature  String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
   areaId     String?
+  cargo      String?
+  email      String?
+  documents  Document[]  @relation("CreatorRelation")
+  sessions   Session[]
+  signatures Signature[]
   area       Area?       @relation("UserArea", fields: [areaId], references: [id])
   verifiers  Verifier[]
-  documents  Document[]  @relation("CreatorRelation")
-  signatures Signature[]
-  
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  incidents  Incident[]
 
   @@index([areaId])
 }
@@ -62,22 +56,24 @@ model User {
 model Session {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "Session_userId_fkey")
 }
 
 model Area {
   id           String     @id @default(uuid())
-  name         String     @unique // "Operaciones" | "Administración" | "Mantenimiento" | "Logística"
-  color        String?    // color per area (p.ej. "blue", "purple", "emerald", "amber")
-  folderNodeId String?    @unique // Link to the folder Node in explorer
-  folderNode   Node?      @relation("AreaFolderNode", fields: [folderNodeId], references: [id])
-  users        User[]     @relation("UserArea")
-  verifiers    Verifier[]
-  documents    Document[]
+  name         String     @unique
+  color        String?
+  folderNodeId String?    @unique
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  folderNode   Node?      @relation("AreaFolderNode", fields: [folderNodeId], references: [id])
+  documents    Document[]
+  users        User[]     @relation("UserArea")
+  verifiers    Verifier[]
 
   @@index([folderNodeId])
 }
@@ -85,12 +81,12 @@ model Area {
 model Verifier {
   id        String   @id @default(uuid())
   areaId    String
-  area      Area     @relation(fields: [areaId], references: [id], onDelete: Cascade)
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  signOrder Int      // orden de firma (1, 2, 3)
+  signOrder Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  area      Area     @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([areaId, userId])
   @@index([areaId])
@@ -100,15 +96,15 @@ model Verifier {
 model Document {
   id         String      @id @default(uuid())
   areaId     String
-  area       Area        @relation(fields: [areaId], references: [id], onDelete: Cascade)
-  nodeId     String?     @unique // Link to the Node table
-  node       Node?       @relation("DocumentNode", fields: [nodeId], references: [id], onDelete: Cascade)
-  status     String      // "PENDIENTE" | "EN_PROCESO" | "APROBADO" | "RECHAZADO"
+  nodeId     String?     @unique
+  status     String
   creatorId  String
-  creator    User        @relation("CreatorRelation", fields: [creatorId], references: [id], onDelete: Cascade)
-  signatures Signature[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
+  area       Area        @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  creator    User        @relation("CreatorRelation", fields: [creatorId], references: [id], onDelete: Cascade)
+  node       Node?       @relation("DocumentNode", fields: [nodeId], references: [id], onDelete: Cascade)
+  signatures Signature[]
 
   @@index([areaId])
   @@index([creatorId])
@@ -118,19 +114,17 @@ model Document {
 model Signature {
   id         String    @id @default(uuid())
   documentId String
-  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
   userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status     String    // "PENDIENTE" | "APROBADO" | "RECHAZADO"
-  signedAt   DateTime? // fecha y hora de la firma
+  status     String
+  signedAt   DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-
-  // NEW fields for traceability
-  pageNumber Int?
   coordX     Float?
   coordY     Float?
   ipAddress  String?
+  pageNumber Int?
+  document   Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([documentId, userId])
   @@index([documentId])
@@ -145,38 +139,33 @@ model Audit {
   createdAt DateTime @default(now())
 }
 
-// ==========================================
-// MODELS FROM MAINTENANCE APP (mantenimiento)
-// To prevent Prisma from dropping them on db push
-// ==========================================
-
 model MaintUser {
   id        String   @id @default(uuid())
   username  String   @unique
-  password  String   // Hashed password
+  password  String
   name      String
-  role      String   // "ADMIN" | "CREATOR" | "VIEWER"
+  role      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Report {
-  id          String   @id @default(uuid())
-  title       String   // e.g. "Reporte semanal de mantenimiento"
-  periodFrom  String   // e.g. "12/06/26"
-  periodTo    String   // e.g. "20/06/26"
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  items       Item[]
+  id         String   @id @default(uuid())
+  title      String
+  periodFrom String
+  periodTo   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  items      Item[]
 }
 
 model Item {
   id          String    @id @default(uuid())
   reportId    String
+  itemNumber  Int
+  date        String
+  responsable String
   report      Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  itemNumber  Int       // 1, 2, 3
-  date        String    // "15.06.26"
-  responsable String    // "PROMAQUIRSA"
   machines    Machine[]
 
   @@index([reportId])
@@ -185,8 +174,8 @@ model Item {
 model Machine {
   id     String @id @default(uuid())
   itemId String
+  name   String
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  name   String // "Ablandador"
   tasks  Task[]
 
   @@index([itemId])
@@ -195,24 +184,40 @@ model Machine {
 model Task {
   id          String  @id @default(uuid())
   machineId   String
+  falla       String
+  tipo        String
+  descripcion String
+  repuestos   String
+  cantidad    String
+  estado      String
   machine     Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
-  falla       String  // "No Succiona la sal"
-  tipo        String  // "correctivo"
-  descripcion String  // "Limpieza de filtro de succion"
-  repuestos   String  // "oring (tych)"
-  cantidad    String  // "1"
-  estado      String  // "completado" | "proceso" | "pendiente"
 
   @@index([machineId])
 }
 
 model Tarea {
-  id                  String   @id @default(uuid())
-  responsable         String
-  descripcion         String   @db.Text
-  estado              String   @default("PENDIENTE") // "HECHO" | "PENDIENTE"
-  fecha_creacion      DateTime @default(now())
-  fecha_actualizacion DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  responsable          String
+  descripcion          String   @db.Text
+  estado               String   @default("PENDIENTE")
+  fecha_creacion       DateTime @default(now())
+  fecha_actualizacion  DateTime @updatedAt
+  cantidad             String?
+  equipo               String?
+  falla                String?  @db.Text
+  fecha                String?
+  itemNumber           Int?
+  repuestos            String?
+  sede                 String?
+  tipo                 String?
+  esRecurrente         Boolean  @default(true)
+  fechaUltimaEjecucion String?
+  frecuenciaMeses      Int?
+  proximaEjecucion     String?
+  tareaPadreId         String?
+  certificadoNombre    String?
+  certificadoPath      String?
+  fechaCulminado       String?
 
   @@map("Tarea")
 }
@@ -227,72 +232,67 @@ model Responsable {
 }
 
 model SparePart {
-  id          String   @id @default(uuid())
-  name        String
-  code        String   @unique
-  stock       Int      @default(0)
-  minStock    Int      @default(0)
-  price       Float?
-  location    String?  // Storage shelf/bin
-  isMatachana Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Campos comunes y específicos de Inventario
-  metodo          String?   @default("")
-  metodo2         String?   @default("")
-  repuesto        String?   @default("")
-  codigoMarca     String?   @default("")
-  marca1          String?   @default("")
-  comentario      String?   @default("")
-  fotoNombre      String?   @default("")
-  fotoPath        String?   @default("")
-  almacenado      String?   @default("")
-  seccion         String?   @default("")
-  
-  // Campos específicos de Repuestos Matachana
-  correlativo     String?   @default("")
-  descripcion     String?   @default("")
-  codigoMatachana String?   @default("")
-  kit1            String?   @default("")
-  kit2            String?   @default("")
-  usados          Int       @default(0)
+  id              String   @id @default(uuid())
+  name            String
+  code            String   @unique
+  stock           Int      @default(0)
+  minStock        Int      @default(0)
+  price           Float?
+  location        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  isMatachana     Boolean  @default(false)
+  almacenado      String?  @default("")
+  codigoMarca     String?  @default("")
+  codigoMatachana String?  @default("")
+  comentario      String?  @default("")
+  correlativo     String?  @default("")
+  descripcion     String?  @default("")
+  fotoNombre      String?  @default("")
+  fotoPath        String?  @default("")
+  kit1            String?  @default("")
+  kit2            String?  @default("")
+  marca1          String?  @default("")
+  metodo          String?  @default("")
+  metodo2         String?  @default("")
+  repuesto        String?  @default("")
+  seccion         String?  @default("")
+  usados          Int      @default(0)
 }
 
 model License {
-  id            String   @id @default(uuid())
-  name          String
-  entity        String   // Issuing entity (e.g. SUSALUD, Diresa)
-  code          String?  // License number/code
-  issueDate     String
-  expiryDate    String
-  status        String   // "VIGENTE" | "VENCIDO" | "EN_TRAMITE"
-  details       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  archivoNombre String?
-  archivoPath   String?
-  archivoNombreCertificado String?
-  archivoPathCertificado   String?
-  vencimientoCertificado   String?
-  archivoNombreProtocolo String?
-  archivoPathProtocolo   String?
-  vencimientoProtocolo   String?
+  id                          String           @id @default(uuid())
+  name                        String
+  entity                      String
+  code                        String?
+  issueDate                   String
+  expiryDate                  String
+  status                      String
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
+  archivoNombre               String?
+  archivoPath                 String?
+  carpetaId                   String?
+  archivoNombreCertificado    String?
+  archivoNombreCheckList      String?
+  archivoNombreFactura        String?
   archivoNombreInformeTecnico String?
+  archivoNombrePresupuesto    String?
+  archivoNombreProtocolo      String?
+  archivoPathCertificado      String?
+  archivoPathCheckList        String?
+  archivoPathFactura          String?
   archivoPathInformeTecnico   String?
+  archivoPathPresupuesto      String?
+  archivoPathProtocolo        String?
+  details                     String?
+  vencimientoCertificado      String?
+  vencimientoCheckList        String?
+  vencimientoFactura          String?
   vencimientoInformeTecnico   String?
-  archivoNombreFactura String?
-  archivoPathFactura   String?
-  vencimientoFactura   String?
-  archivoNombrePresupuesto String?
-  archivoPathPresupuesto   String?
-  vencimientoPresupuesto   String?
-  archivoNombreCheckList String?
-  archivoPathCheckList   String?
-  vencimientoCheckList   String?
-  carpetaId     String?
-  carpeta       LicenciaCarpeta? @relation("FolderLicenses", fields: [carpetaId], references: [id], onDelete: SetNull)
+  vencimientoPresupuesto      String?
+  vencimientoProtocolo        String?
+  carpeta                     LicenciaCarpeta? @relation("FolderLicenses", fields: [carpetaId], references: [id])
 
   @@index([carpetaId])
 }
@@ -305,4 +305,16 @@ model LicenciaCarpeta {
   licenses  License[] @relation("FolderLicenses")
 }
 
+model Incident {
+  id          String   @id @default(uuid())
+  title       String
+  area        String   // Área afectada (Operaciones, Logística, Mantenimiento, Administración, General)
+  description String   @db.Text
+  imageUrl    String?  // Ruta local o URL de Supabase para la foto
+  status      String   @default("Pendiente") // Pendiente, En Revisión, Solucionado
+  createdAt   DateTime @default(now())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+}

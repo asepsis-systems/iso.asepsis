@@ -9,7 +9,8 @@ import {
   Database,
   FileCheck,
   FileText,
-  Users
+  Users,
+  AlertTriangle
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -126,6 +127,25 @@ export default function Sidebar({
               </button>
             );
           })}
+
+          <button
+            onClick={() => handleFilterClick('incidents')}
+            className={clsx(
+              "flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative w-full text-left mt-1",
+              currentFilter === 'incidents'
+                ? "bg-slate-800 text-white shadow-sm border border-slate-700/30" 
+                : "hover:bg-slate-800/40 text-slate-400 hover:text-slate-200"
+            )}
+          >
+            {currentFilter === 'incidents' && (
+              <span className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-rose-500 rounded-r" />
+            )}
+            <AlertTriangle className={clsx(
+              "w-4 h-4 transition-colors shrink-0",
+              currentFilter === 'incidents' ? "text-rose-400" : "text-slate-500 group-hover:text-rose-400"
+            )} />
+            <span>Reportar Incidentes</span>
+          </button>
         </div>
 
         {/* Navigation Group: Verifier Flows */}

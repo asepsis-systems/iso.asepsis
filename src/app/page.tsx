@@ -27,6 +27,7 @@ import {
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import FilePreview from '@/components/FilePreview';
+import IncidentsDashboard from '@/components/IncidentsDashboard';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
 
@@ -1065,7 +1066,10 @@ export default function Dashboard() {
         />
 
         {/* Dynamic Dashboard Body */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+        {currentFilter === 'incidents' ? (
+          <IncidentsDashboard user={user} />
+        ) : (
+          <main className="flex-1 overflow-y-auto p-6 md:p-8">
           
           {/* Breadcrumbs Navigation Path */}
           {currentFilter === 'all' && (
@@ -1910,7 +1914,8 @@ export default function Dashboard() {
             )
           )}
 
-        </main>
+          </main>
+        )}
       </div>
 
       {/* MODAL: Nueva Carpeta */}

@@ -192,8 +192,25 @@ export async function GET(request: NextRequest) {
         if (parentId === 'root' || !parentId) {
           if (user && user.role !== 'ADMIN' && user.areaId) {
             const userArea = await db.area.findUnique({ where: { id: user.areaId } });
+            const generalFolder = await db.node.findFirst({
+              where: {
+                name: 'General',
+                parentId: null,
+                type: 'FOLDER',
+                isTrashed: false
+              }
+            });
+
+            const visibleFolderIds: string[] = [];
             if (userArea && userArea.folderNodeId) {
-              whereClause.id = userArea.folderNodeId;
+              visibleFolderIds.push(userArea.folderNodeId);
+            }
+            if (generalFolder) {
+              visibleFolderIds.push(generalFolder.id);
+            }
+
+            if (visibleFolderIds.length > 0) {
+              whereClause.id = { in: visibleFolderIds };
             } else {
               whereClause.id = 'non-existent-id';
             }
@@ -366,7 +383,7 @@ export async function POST(request: NextRequest) {
 
 
     // Check permission to create folder
-    const allowed = await canUserAccessNode(currentUser, cleanParentId, true);
+    const allowed = await canUserAccessNode(currentUser, cleanParentId, true, true);
     const parentName = await getNodeName(cleanParentId);
     const userAreaName = currentUser.areaId 
       ? (await db.area.findUnique({ where: { id: currentUser.areaId } }))?.name || 'Área'
@@ -467,7 +484,7 @@ export async function PUT(request: NextRequest) {
     // If parentId (move destination) is provided, validate destination folder access
     if (parentId !== undefined) {
       const destParentId = (parentId === 'root' || parentId === '') ? null : parentId;
-      const destAllowed = await canUserAccessNode(currentUser, destParentId, true);
+      const destAllowed = await canUserAccessNode(currentUser, destParentId, true, true);
       const destParentName = await getNodeName(destParentId);
       if (!destAllowed) {
         await logAuthorization(

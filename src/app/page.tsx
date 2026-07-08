@@ -69,7 +69,7 @@ interface UserItem {
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<{ id: string; name: string; username: string; role: string; areaId?: string | null; signature?: string | null; cargo?: string | null } | null>(null);
+  const [user, setUser] = useState<{ id: string; name: string; username: string; role: string; areaId?: string | null; signature?: string | null; cargo?: string | null; email?: string | null } | null>(null);
   const [items, setItems] = useState<ItemNode[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
   const [currentParentId, setCurrentParentId] = useState<string | null>(null);
@@ -420,6 +420,9 @@ export default function Dashboard() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileSignatureFile, setProfileSignatureFile] = useState<File | null>(null);
   const [profileUploadLoading, setProfileUploadLoading] = useState(false);
+  const [profileSaveLoading, setProfileSaveLoading] = useState(false);
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileCargo, setProfileCargo] = useState('');
   const [profileError, setProfileError] = useState('');
 
   // Fetch Items from SQLite DB
@@ -1062,7 +1065,13 @@ export default function Dashboard() {
           setViewMode={setViewMode}
           user={user}
           onLogout={handleLogout}
-          onProfileClick={() => setIsProfileModalOpen(true)}
+          onProfileClick={() => {
+            if (user) {
+              setProfileEmail(user.email || '');
+              setProfileCargo(user.cargo || '');
+            }
+            setIsProfileModalOpen(true);
+          }}
         />
 
         {/* Dynamic Dashboard Body */}
@@ -2434,31 +2443,107 @@ export default function Dashboard() {
             )}
 
             <div className="space-y-4">
-              {/* User Details */}
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2.5">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-400">Nombre Completo:</span>
-                  <span className="text-slate-800">{user.name}</span>
+              {/* Información de Perfil Editable */}
+              <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <h4 className="text-xs font-bold text-slate-700">Mi Información</h4>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Nombre Completo</label>
+                    <div className="text-xs text-slate-800 font-semibold bg-slate-200/50 p-2.5 rounded-xl border border-slate-100">
+                      {user.name}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Nombre de Usuario</label>
+                    <div className="text-xs text-slate-800 font-semibold font-mono bg-slate-200/50 p-2.5 rounded-xl border border-slate-100">
+                      {user.username}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Correo Electrónico</label>
+                    <input
+                      type="email"
+                      value={profileEmail}
+                      onChange={(e) => setProfileEmail(e.target.value)}
+                      placeholder="ejemplo@asepsis.pe"
+                      className="w-full text-xs text-slate-800 font-semibold bg-white p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-brand-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Cargo Profesional</label>
+                    <input
+                      type="text"
+                      value={profileCargo}
+                      onChange={(e) => setProfileCargo(e.target.value)}
+                      placeholder="Gerente, Analista, etc."
+                      className="w-full text-xs text-slate-800 font-semibold bg-white p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:border-brand-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-xs font-semibold pt-1">
+                    <span className="text-slate-400">Área de Trabajo:</span>
+                    <span className="text-slate-800">
+                      {areas.find(a => a.id === user.areaId)?.name || 'General / Global'}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-400">Rol asignado:</span>
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-brand-50 text-brand-600 border-brand-200 uppercase">
+                      {user.role === 'ADMIN' ? 'Administrador' : user.role === 'CREATOR' ? 'Creador' : 'Verificador'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-400">Nombre de Usuario:</span>
-                  <span className="text-slate-800 font-mono">{user.username}</span>
-                </div>
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-400">Cargo Profesional:</span>
-                  <span className="text-slate-800">{user.cargo || 'No asignado'}</span>
-                </div>
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-400">Área de Trabajo:</span>
-                  <span className="text-slate-800">
-                    {areas.find(a => a.id === user.areaId)?.name || 'General / Global'}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-400">Rol asignado:</span>
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-brand-50 text-brand-600 border-brand-200 uppercase">
-                    {user.role === 'ADMIN' ? 'Administrador' : user.role === 'CREATOR' ? 'Creador' : 'Verificador'}
-                  </span>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    disabled={profileSaveLoading}
+                    onClick={async () => {
+                      setProfileSaveLoading(true);
+                      setProfileError('');
+                      try {
+                        const res = await fetch('/api/users', {
+                          method: 'PUT',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          },
+                          body: JSON.stringify({
+                            id: user.id,
+                            email: profileEmail,
+                            cargo: profileCargo
+                          })
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          // Update local user state
+                          setUser(prev => prev ? { ...prev, email: data.user.email, cargo: data.user.cargo } : null);
+                          alert('Información de perfil actualizada con éxito.');
+                          loadItems();
+                        } else {
+                          setProfileError(data.error || 'Error al guardar el perfil.');
+                        }
+                      } catch (err) {
+                        console.error('Error saving profile:', err);
+                        setProfileError('Error de red al guardar el perfil.');
+                      } finally {
+                        setProfileSaveLoading(false);
+                      }
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+                  >
+                    {profileSaveLoading ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Guardando...</span>
+                      </>
+                    ) : (
+                      <span>Guardar Datos</span>
+                    )}
+                  </button>
                 </div>
               </div>
 

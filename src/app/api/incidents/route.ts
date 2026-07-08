@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/incidents - Update an incident's operational status (ADMIN / VERIFIER only)
+// PUT /api/incidents - Update an incident report (details by creator/admin, status by admin/verifier)
 export async function PUT(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -153,22 +153,33 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    // Verify authorized roles (ADMIN, VERIFIER)
-    if (currentUser.role !== 'ADMIN' && currentUser.role !== 'VERIFIER') {
-      return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de Administrador o Verificador.' }, { status: 403 });
+    let id: string | null = null;
+    let status: string | null = null;
+    let title: string | null = null;
+    let area: string | null = null;
+    let description: string | null = null;
+    let file: File | null = null;
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      id = formData.get('id') as string | null;
+      status = formData.get('status') as string | null;
+      title = formData.get('title') as string | null;
+      area = formData.get('area') as string | null;
+      description = formData.get('description') as string | null;
+      file = formData.get('file') as File | null;
+    } else {
+      const body = await request.json();
+      id = body.id;
+      status = body.status;
+      title = body.title;
+      area = body.area;
+      description = body.description;
     }
 
-    const body = await request.json();
-    const { id, status } = body;
-
-    if (!id || !status) {
-      return NextResponse.json({ error: 'Identificador y estado son requeridos' }, { status: 400 });
-    }
-
-    // Validate allowed status transitions
-    const allowedStatuses = ['Pendiente', 'En Revisión', 'Solucionado'];
-    if (!allowedStatuses.includes(status)) {
-      return NextResponse.json({ error: 'Estado de incidente inválido' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'El identificador del incidente es requerido' }, { status: 400 });
     }
 
     // Fetch the current incident to check existence
@@ -180,10 +191,94 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'El incidente no existe' }, { status: 404 });
     }
 
+    const isCreator = currentUser.id === existingIncident.userId;
+    const isAdmin = currentUser.role === 'ADMIN';
+    const isVerifier = currentUser.role === 'VERIFIER';
+
+    // 1. Authorization for Status Update (ADMIN or VERIFIER)
+    if (status && status !== existingIncident.status) {
+      const allowedStatuses = ['Pendiente', 'En Revisión', 'Solucionado'];
+      if (!allowedStatuses.includes(status)) {
+        return NextResponse.json({ error: 'Estado de incidente inválido' }, { status: 400 });
+      }
+
+      if (!isAdmin && !isVerifier) {
+        return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de Administrador o Verificador para cambiar el estado.' }, { status: 403 });
+      }
+    }
+
+    // 2. Authorization for details update (Title, Area, Description, Image)
+    const isEditingDetails = (title && title.trim() !== existingIncident.title) || 
+                            (area && area.trim() !== existingIncident.area) || 
+                            (description && description.trim() !== existingIncident.description) || 
+                            file;
+
+    if (isEditingDetails) {
+      if (!isCreator && !isAdmin) {
+        return NextResponse.json({ error: 'Acceso denegado. Solo el creador original o un Administrador pueden modificar los detalles del reporte.' }, { status: 403 });
+      }
+    }
+
+    let imageUrl = existingIncident.imageUrl;
+
+    if (file) {
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      
+      const fileId = crypto.randomUUID();
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const diskFileName = `${fileId}-${sanitizedFileName}`;
+
+      if (supabase) {
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase
+          .storage
+          .from('files')
+          .upload(`incidents/${diskFileName}`, buffer, {
+            contentType: file.type || 'application/octet-stream',
+            upsert: true
+          });
+
+        if (uploadError) {
+          throw new Error('Error de almacenamiento en Supabase: ' + uploadError.message);
+        }
+
+        const { data } = supabase.storage.from('files').getPublicUrl(`incidents/${diskFileName}`);
+        imageUrl = data?.publicUrl || null;
+      } else {
+        // Local physical fallback
+        const uploadDir = path.join(process.cwd(), 'public', 'incidents');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filePath = path.join(uploadDir, diskFileName);
+        fs.writeFileSync(filePath, buffer);
+        imageUrl = `/incidents/${diskFileName}`;
+      }
+    }
+
+    // Build update data
+    const updateData: any = {};
+    if (status) {
+      updateData.status = status;
+    }
+    if (title && title.trim()) {
+      updateData.title = title.trim();
+    }
+    if (area && area.trim()) {
+      updateData.area = area.trim();
+    }
+    if (description && description.trim()) {
+      updateData.description = description.trim();
+    }
+    if (file) {
+      updateData.imageUrl = imageUrl;
+    }
+
     // Update status in DB
     const updatedIncident = await db.incident.update({
       where: { id },
-      data: { status },
+      data: updateData,
       include: {
         user: {
           select: {
@@ -196,17 +291,25 @@ export async function PUT(request: NextRequest) {
     });
 
     // Log update in Audit Trails
+    let auditDetail = `Actualizó el reporte de incidente "${existingIncident.title}".`;
+    if (status && status !== existingIncident.status) {
+      auditDetail += ` Cambió el estado de "${existingIncident.status}" a "${status}".`;
+    }
+    if (title && title.trim() !== existingIncident.title) {
+      auditDetail += ` Cambió el título de "${existingIncident.title}" a "${title.trim()}".`;
+    }
+
     await db.audit.create({
       data: {
         username: currentUser.username,
         action: 'ACTUALIZAR_INCIDENTE',
-        detail: `Cambió el estado del incidente "${existingIncident.title}" de "${existingIncident.status}" a "${status}"`
+        detail: auditDetail
       }
     });
 
     return NextResponse.json({ success: true, incident: updatedIncident });
   } catch (error: any) {
-    console.error('Error updating incident status:', error);
+    console.error('Error updating incident:', error);
     return NextResponse.json({ error: 'Error al actualizar el incidente: ' + error.message }, { status: 500 });
   }
 }

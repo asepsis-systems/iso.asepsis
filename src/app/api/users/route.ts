@@ -130,12 +130,17 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// PUT /api/users - Update user (ADMIN only)
+// PUT /api/users - Update user (ADMIN only or SELF-update for normal users)
 export async function PUT(request: NextRequest) {
   try {
-    const adminUser = await checkAdmin(request);
-    if (!adminUser) {
-      return NextResponse.json({ error: 'No autorizado. Solo los administradores pueden editar usuarios.' }, { status: 403 });
+    const token = request.cookies.get('session_token')?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'No autorizado. Por favor inicia sesión.' }, { status: 401 });
+    }
+
+    const decoded = await verifyToken(token);
+    if (!decoded) {
+      return NextResponse.json({ error: 'Sesión inválida o expirada.' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -143,6 +148,13 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ error: 'El ID del usuario es obligatorio' }, { status: 400 });
+    }
+
+    const isSelfUpdate = decoded.userId === id;
+    const isAdmin = decoded.role === 'ADMIN';
+
+    if (!isAdmin && !isSelfUpdate) {
+      return NextResponse.json({ error: 'No autorizado. Solo los administradores pueden editar otros usuarios.' }, { status: 403 });
     }
 
     // Check if user exists
@@ -155,45 +167,64 @@ export async function PUT(request: NextRequest) {
     }
 
     const updateData: any = {};
-    if (name && name.trim()) {
-      updateData.name = name.trim();
-    }
 
-    if (username && username.trim()) {
-      const cleanUsername = username.trim().toLowerCase();
-      if (cleanUsername !== targetUser.username) {
-        const duplicateUser = await db.user.findUnique({
-          where: { username: cleanUsername },
-        });
-        if (duplicateUser) {
-          return NextResponse.json({ error: 'El nombre de usuario ya existe' }, { status: 400 });
-        }
-        updateData.username = cleanUsername;
+    // For admins, all fields can be updated.
+    // For self-update, only allow name, email, cargo, password (optional)
+    if (isAdmin) {
+      if (name && name.trim()) {
+        updateData.name = name.trim();
       }
-    }
 
-    if (password && password.trim()) {
-      updateData.password = hashPassword(password);
-    }
+      if (username && username.trim()) {
+        const cleanUsername = username.trim().toLowerCase();
+        if (cleanUsername !== targetUser.username) {
+          const duplicateUser = await db.user.findUnique({
+            where: { username: cleanUsername },
+          });
+          if (duplicateUser) {
+            return NextResponse.json({ error: 'El nombre de usuario ya existe' }, { status: 400 });
+          }
+          updateData.username = cleanUsername;
+        }
+      }
 
-    if (role) {
-      updateData.role = role.toUpperCase();
-    }
+      if (password && password.trim()) {
+        updateData.password = hashPassword(password);
+      }
 
-    if (signature !== undefined) {
-      updateData.signature = signature;
-    }
+      if (role) {
+        updateData.role = role.toUpperCase();
+      }
 
-    if (areaId !== undefined) {
-      updateData.areaId = areaId;
-    }
+      if (signature !== undefined) {
+        updateData.signature = signature;
+      }
 
-    if (cargo !== undefined) {
-      updateData.cargo = cargo ? cargo.trim() : null;
-    }
+      if (areaId !== undefined) {
+        updateData.areaId = areaId;
+      }
 
-    if (email !== undefined) {
-      updateData.email = email ? email.trim() : null;
+      if (cargo !== undefined) {
+        updateData.cargo = cargo ? cargo.trim() : null;
+      }
+
+      if (email !== undefined) {
+        updateData.email = email ? email.trim() : null;
+      }
+    } else {
+      // Self update: only allow certain fields
+      if (name && name.trim()) {
+        updateData.name = name.trim();
+      }
+      if (password && password.trim()) {
+        updateData.password = hashPassword(password);
+      }
+      if (cargo !== undefined) {
+        updateData.cargo = cargo ? cargo.trim() : null;
+      }
+      if (email !== undefined) {
+        updateData.email = email ? email.trim() : null;
+      }
     }
 
     // If nothing to update, return success early

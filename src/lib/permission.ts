@@ -21,12 +21,32 @@ export async function findAreaForNode(nodeId: string | null): Promise<any | null
 }
 
 /**
+ * Recurse upwards to check if a folder (or file's parent folder) resides under the "General" root folder.
+ */
+export async function isNodeUnderGeneral(nodeId: string | null): Promise<boolean> {
+  let currentId = nodeId;
+  while (currentId) {
+    const node = await db.node.findUnique({
+      where: { id: currentId },
+      select: { id: true, name: true, parentId: true }
+    });
+    if (!node) break;
+    if (node.parentId === null && node.name === 'General') {
+      return true;
+    }
+    currentId = node.parentId;
+  }
+  return false;
+}
+
+/**
  * Check if the user is authorized to read/write a specific folder or file node.
  */
 export async function canUserAccessNode(
   user: any,
   nodeId: string | null,
-  isWrite: boolean = false
+  isWrite: boolean = false,
+  isParentFolder: boolean = false
 ): Promise<boolean> {
   if (!user) return false;
 
@@ -42,7 +62,32 @@ export async function canUserAccessNode(
     return !isWrite;
   }
 
-  // 3. Find if the node is linked to the user's area
+  // 3. Check if the node is the "General" root folder itself.
+  // Restricted users can read/open it and write inside it (isParentFolder = true),
+  // but only ADMIN/Global can rename, move, or delete it directly (isParentFolder = false).
+  const isGeneralRootFolder = await db.node.findFirst({
+    where: {
+      id: nodeId,
+      name: 'General',
+      parentId: null,
+      type: 'FOLDER'
+    }
+  });
+  if (isGeneralRootFolder) {
+    if (isWrite && !isParentFolder) {
+      return false; // Block renaming, moving, or deleting the General root folder itself
+    }
+    return true; // Allow reading and writing *inside* the General root folder
+  }
+
+  // 4. Check if the node resides under the "General" folder (subfolders/files).
+  // Any restricted user is allowed to read and write inside the General folder.
+  const isUnderGeneral = await isNodeUnderGeneral(nodeId);
+  if (isUnderGeneral) {
+    return true;
+  }
+
+  // 5. Find if the node is linked to the user's area
   const nodeArea = await findAreaForNode(nodeId);
   if (nodeArea && nodeArea.id === user.areaId) {
     return true;

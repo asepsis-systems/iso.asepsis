@@ -66,6 +66,15 @@ export default function IncidentsDashboard({ user }: IncidentsDashboardProps) {
   // Status updating state
   const [updatingStatus, setUpdatingStatus] = useState(false);
   
+  // Edit form states
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editArea, setEditArea] = useState('Operaciones');
+  const [editDescription, setEditDescription] = useState('');
+  const [editFile, setEditFile] = useState<File | null>(null);
+  const [editImagePreview, setEditImagePreview] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  
   // Custom toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -154,6 +163,64 @@ export default function IncidentsDashboard({ user }: IncidentsDashboardProps) {
       showToast('Error de red al enviar el reporte', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Handle image select & preview for EDIT
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setEditFile(file);
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Submit edited incident report
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIncident) return;
+    if (!editTitle.trim() || !editDescription.trim()) {
+      showToast('Por favor completa todos los campos requeridos', 'error');
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const formData = new FormData();
+      formData.append('id', selectedIncident.id);
+      formData.append('title', editTitle.trim());
+      formData.append('area', editArea);
+      formData.append('description', editDescription.trim());
+      if (editFile) {
+        formData.append('file', editFile);
+      }
+
+      const res = await fetch('/api/incidents', {
+        method: 'PUT',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Reporte de incidente actualizado exitosamente');
+        setIsEditing(false);
+        // Refresh detail view
+        setSelectedIncident(data.incident);
+        // Refresh list
+        fetchIncidents();
+      } else {
+        showToast(data.error || 'Error al actualizar el incidente', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error de red al actualizar el reporte', 'error');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -611,7 +678,7 @@ export default function IncidentsDashboard({ user }: IncidentsDashboardProps) {
         </div>
       )}
 
-      {/* MODAL 2: Detail View & Status Management */}
+      {/* MODAL 2: Detail View & Status/Details Editing */}
       {isDetailOpen && selectedIncident && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm transition-all duration-300">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-up">
@@ -620,12 +687,15 @@ export default function IncidentsDashboard({ user }: IncidentsDashboardProps) {
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-rose-500" />
                 <div>
-                  <h2 className="text-md font-bold text-white max-w-[400px] truncate">{selectedIncident.title}</h2>
+                  <h2 className="text-md font-bold text-white max-w-[400px] truncate">
+                    {isEditing ? 'Editar Reporte de Incidente' : selectedIncident.title}
+                  </h2>
                   <p className="text-[10px] text-slate-500 mt-0.5 font-bold uppercase tracking-wider">ID: {selectedIncident.id}</p>
                 </div>
               </div>
               <button 
                 onClick={() => {
+                  setIsEditing(false);
                   setIsDetailOpen(false);
                   setSelectedIncident(null);
                 }}
@@ -636,110 +706,251 @@ export default function IncidentsDashboard({ user }: IncidentsDashboardProps) {
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-              {/* Quick Info Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl border border-slate-800/50 bg-slate-950/20">
-                <div className="flex items-start gap-2.5">
-                  <Building2 className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Área Afectada</span>
-                    <span className="text-xs font-semibold text-white">{selectedIncident.area}</span>
+            {isEditing ? (
+              <form onSubmit={handleEditSubmit} className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+                {/* Grid 2 Columns */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Title */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Título del Incidente <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Ej. Fuga de agua en el ablandador"
+                      className="px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500/50 transition-all duration-200"
+                    />
                   </div>
-                </div>
 
-                <div className="flex items-start gap-2.5">
-                  <User className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Reportante</span>
-                    <span className="text-xs font-semibold text-white">{selectedIncident.user.name}</span>
-                    <span className="text-[9px] text-slate-400 font-medium uppercase mt-0.5">{selectedIncident.user.role}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <Calendar className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Fecha de Reporte</span>
-                    <span className="text-xs font-semibold text-white">{formatDate(selectedIncident.createdAt)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Section & Admin Controller */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-slate-800/40 bg-slate-900/60">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">Estado Actual:</span>
-                  {getStatusBadge(selectedIncident.status)}
-                </div>
-
-                {/* Status Manager Dropdown (ADMIN or VERIFIER only) */}
-                {user && (user.role === 'ADMIN' || user.role === 'VERIFIER') && (
-                  <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-1.5 rounded-xl shrink-0">
-                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider pl-2 shrink-0">Acción:</span>
+                  {/* Area Affected */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Área Afectada <span className="text-rose-500">*</span></label>
                     <select
-                      disabled={updatingStatus}
-                      value={selectedIncident.status}
-                      onChange={(e) => handleStatusUpdate(selectedIncident.id, e.target.value)}
-                      className="bg-slate-900 border border-slate-800/60 rounded-lg text-xs font-bold text-slate-100 py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-rose-500/50 disabled:opacity-50 transition-all cursor-pointer"
+                      value={editArea}
+                      onChange={(e) => setEditArea(e.target.value)}
+                      className="px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500/50 transition-all duration-200"
                     >
-                      <option value="Pendiente">Marcar Pendiente</option>
-                      <option value="En Revisión">Marcar En Revisión</option>
-                      <option value="Solucionado">Marcar Solucionado</option>
+                      <option value="Operaciones">Operaciones</option>
+                      <option value="Logística">Logística</option>
+                      <option value="Mantenimiento">Mantenimiento</option>
+                      <option value="Administración">Administración</option>
+                      <option value="General">General</option>
                     </select>
-                    {updatingStatus && <Loader2 className="w-3.5 h-3.5 text-rose-500 animate-spin mr-1.5 shrink-0" />}
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Descripción Detallada <span className="text-rose-500">*</span></label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    placeholder="Detalla de forma clara el incidente observado, equipos involucrados e impacto operativo..."
+                    className="px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500/50 transition-all duration-200"
+                  />
+                </div>
+
+                {/* File Attachment / Image drag and drop */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Evidencia Fotográfica (Opcional)</label>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    {/* Drop zone / Upload input */}
+                    <div className="relative border-2 border-dashed border-slate-800 hover:border-slate-700/80 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-950/20 hover:bg-slate-950/40 transition-all duration-200 min-h-[140px]">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEditFileChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                      <ImageIcon className="w-8 h-8 text-slate-500" />
+                      <span className="text-xs font-semibold text-slate-300">Cargar Nueva Imagen</span>
+                      <span className="text-[10px] text-slate-500 text-center">Formatos permitidos: JPG, PNG. Máx 5MB</span>
+                    </div>
+
+                    {/* Image Preview Container */}
+                    <div className="border border-slate-800 bg-slate-950/30 rounded-2xl min-h-[140px] flex items-center justify-center overflow-hidden p-2 relative">
+                      {editImagePreview ? (
+                        <>
+                          <img 
+                            src={editImagePreview} 
+                            alt="Previsualización" 
+                            className="max-h-[120px] max-w-full rounded-xl object-contain"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditFile(null);
+                              setEditImagePreview(null);
+                            }}
+                            className="absolute top-2 right-2 p-1 rounded-full bg-slate-950/80 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-600 font-medium">Sin previsualización</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+                {/* Quick Info Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl border border-slate-800/50 bg-slate-950/20">
+                  <div className="flex items-start gap-2.5">
+                    <Building2 className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Área Afectada</span>
+                      <span className="text-xs font-semibold text-white">{selectedIncident.area}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <User className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Reportante</span>
+                      <span className="text-xs font-semibold text-white">{selectedIncident.user.name}</span>
+                      <span className="text-[9px] text-slate-400 font-medium uppercase mt-0.5">{selectedIncident.user.role}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <Calendar className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Fecha de Reporte</span>
+                      <span className="text-xs font-semibold text-white">{formatDate(selectedIncident.createdAt)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Section & Admin Controller */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-slate-800/40 bg-slate-900/60">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">Estado Actual:</span>
+                    {getStatusBadge(selectedIncident.status)}
+                  </div>
+
+                  {/* Status Manager Dropdown (ADMIN or VERIFIER only) */}
+                  {user && (user.role === 'ADMIN' || user.role === 'VERIFIER') && (
+                    <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-1.5 rounded-xl shrink-0">
+                      <span className="text-xs text-slate-400 font-bold uppercase tracking-wider pl-2 shrink-0">Acción:</span>
+                      <select
+                        disabled={updatingStatus}
+                        value={selectedIncident.status}
+                        onChange={(e) => handleStatusUpdate(selectedIncident.id, e.target.value)}
+                        className="bg-slate-900 border border-slate-800/60 rounded-lg text-xs font-bold text-slate-100 py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-rose-500/50 disabled:opacity-50 transition-all cursor-pointer"
+                      >
+                        <option value="Pendiente">Marcar Pendiente</option>
+                        <option value="En Revisión">Marcar En Revisión</option>
+                        <option value="Solucionado">Marcar Solucionado</option>
+                      </select>
+                      {updatingStatus && <Loader2 className="w-3.5 h-3.5 text-rose-500 animate-spin mr-1.5 shrink-0" />}
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-slate-500" />
+                    Descripción del Incidente
+                  </h3>
+                  <div className="p-4 rounded-xl border border-slate-800/50 bg-slate-950/20 text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">
+                    {selectedIncident.description}
+                  </div>
+                </div>
+
+                {/* Evidencia Fotográfica Image */}
+                {selectedIncident.imageUrl && (
+                  <div className="flex flex-col gap-2">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-slate-500" />
+                      Evidencia Fotográfica de Soporte
+                    </h3>
+                    <div className="border border-slate-800 bg-slate-950 p-2.5 rounded-xl flex items-center justify-center overflow-hidden group/img relative max-h-[300px]">
+                      <img 
+                        src={selectedIncident.imageUrl} 
+                        alt={selectedIncident.title} 
+                        className="max-h-[280px] max-w-full rounded-lg object-contain"
+                      />
+                      <a 
+                        href={selectedIncident.imageUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="absolute top-4 right-4 p-2 rounded-xl bg-slate-950/80 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800/80 transition-all opacity-0 group-hover/img:opacity-100 flex items-center gap-1.5 text-xs font-semibold shadow-md"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>Pantalla Completa</span>
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>
-
-              {/* Description */}
-              <div className="flex flex-col gap-2">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-slate-500" />
-                  Descripción del Incidente
-                </h3>
-                <div className="p-4 rounded-xl border border-slate-800/50 bg-slate-950/20 text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">
-                  {selectedIncident.description}
-                </div>
-              </div>
-
-              {/* Evidencia Fotográfica Image */}
-              {selectedIncident.imageUrl && (
-                <div className="flex flex-col gap-2">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <ImageIcon className="w-4 h-4 text-slate-500" />
-                    Evidencia Fotográfica de Soporte
-                  </h3>
-                  <div className="border border-slate-800 bg-slate-950 p-2.5 rounded-xl flex items-center justify-center overflow-hidden group/img relative max-h-[300px]">
-                    <img 
-                      src={selectedIncident.imageUrl} 
-                      alt={selectedIncident.title} 
-                      className="max-h-[280px] max-w-full rounded-lg object-contain"
-                    />
-                    <a 
-                      href={selectedIncident.imageUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="absolute top-4 right-4 p-2 rounded-xl bg-slate-950/80 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800/80 transition-all opacity-0 group-hover/img:opacity-100 flex items-center gap-1.5 text-xs font-semibold shadow-md"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                      <span>Pantalla Completa</span>
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-800/60 flex items-center justify-end bg-slate-900">
-              <button
-                onClick={() => {
-                  setIsDetailOpen(false);
-                  setSelectedIncident(null);
-                }}
-                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-sm transition-all duration-200 border border-slate-700/30 hover:border-slate-600/30"
-              >
-                Cerrar Detalle
-              </button>
+            <div className="p-4 border-t border-slate-800/60 flex items-center justify-between bg-slate-900">
+              {isEditing ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs transition-all duration-200"
+                  >
+                    Cancelar Edición
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingEdit}
+                    onClick={handleEditSubmit}
+                    className="flex items-center gap-2 bg-gradient-to-r from-rose-500 to-coral-600 hover:from-rose-600 hover:to-coral-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-all duration-200"
+                  >
+                    {savingEdit ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Guardando...</span>
+                      </>
+                    ) : (
+                      <span>Guardar Cambios</span>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    {user && (user.role === 'ADMIN' || selectedIncident.userId === user.id) && (
+                      <button
+                        onClick={() => {
+                          setEditTitle(selectedIncident.title);
+                          setEditArea(selectedIncident.area);
+                          setEditDescription(selectedIncident.description);
+                          setEditFile(null);
+                          setEditImagePreview(selectedIncident.imageUrl);
+                          setIsEditing(true);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold text-xs transition-all duration-200 shadow-md shadow-indigo-500/10"
+                      >
+                        Editar Reporte
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsEditing(false);
+                      setIsDetailOpen(false);
+                      setSelectedIncident(null);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-sm transition-all duration-200 border border-slate-700/30 hover:border-slate-600/30"
+                  >
+                    Cerrar Detalle
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

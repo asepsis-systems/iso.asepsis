@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission to upload to parent directory
-    const allowed = await canUserAccessNode(currentUser, cleanParentId, true);
+    const allowed = await canUserAccessNode(currentUser, cleanParentId, true, true);
     const parentName = await getNodeName(cleanParentId);
     const userAreaName = currentUser.areaId 
       ? (await db.area.findUnique({ where: { id: currentUser.areaId } }))?.name || 'Área'

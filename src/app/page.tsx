@@ -831,9 +831,13 @@ export default function Dashboard() {
       });
       if (res.ok) {
         loadItems();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'No se pudo completar la acción.');
       }
     } catch (err) {
       console.error('Error moving to trash:', err);
+      alert('Error de red al intentar mover el elemento.');
     }
   };
 
@@ -846,9 +850,13 @@ export default function Dashboard() {
       });
       if (res.ok) {
         loadItems();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'No se pudo eliminar el elemento.');
       }
     } catch (err) {
       console.error('Error deleting permanently:', err);
+      alert('Error de red al intentar eliminar permanentemente.');
     }
   };
 

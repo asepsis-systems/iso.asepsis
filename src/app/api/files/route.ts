@@ -441,10 +441,6 @@ export async function PUT(request: NextRequest) {
       include: { document: true, areaFolder: true }
     });
 
-    if (existingNode?.document?.status === 'APROBADO') {
-      return NextResponse.json({ error: 'No se puede modificar un documento completamente aprobado.' }, { status: 400 });
-    }
-
     const token = request.cookies.get('session_token')?.value;
     let currentUser: any = null;
     if (token) {
@@ -458,6 +454,10 @@ export async function PUT(request: NextRequest) {
 
     if (!currentUser) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    if (existingNode?.document?.status === 'APROBADO' && currentUser.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'No se puede modificar un documento completamente aprobado.' }, { status: 400 });
     }
 
     // Check permission on the target node being updated
@@ -572,10 +572,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Archivo no encontrado' }, { status: 404 });
     }
 
-    if (node.document?.status === 'APROBADO') {
-      return NextResponse.json({ error: 'No se puede eliminar un documento completamente aprobado.' }, { status: 400 });
-    }
-
     const token = request.cookies.get('session_token')?.value;
     let currentUser: any = null;
     if (token) {
@@ -589,6 +585,10 @@ export async function DELETE(request: NextRequest) {
 
     if (!currentUser) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
+    if (node.document?.status === 'APROBADO' && currentUser.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'No se puede eliminar un documento completamente aprobado.' }, { status: 400 });
     }
 
     const nodeAllowed = await canUserAccessNode(currentUser, id, true);

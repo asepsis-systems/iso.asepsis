@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Grid, List, ShieldCheck, LogOut } from 'lucide-react';
+import { Search, Grid, List, ShieldCheck, LogOut, Menu } from 'lucide-react';
 import clsx from 'clsx';
 
 interface HeaderProps {
@@ -10,6 +10,7 @@ interface HeaderProps {
   user: { id: string; name: string; username: string; role: string; signature?: string | null } | null;
   onLogout: () => void;
   onProfileClick?: () => void;
+  onMenuClick?: () => void;
 }
 
 export default function Header({
@@ -19,7 +20,8 @@ export default function Header({
   setViewMode,
   user,
   onLogout,
-  onProfileClick
+  onProfileClick,
+  onMenuClick
 }: HeaderProps) {
   
   const getInitials = (name?: string) => {
@@ -31,8 +33,17 @@ export default function Header({
   };
 
   return (
-    <header className="h-16 border-b border-slate-200/80 bg-white/70 backdrop-blur-md px-6 flex items-center justify-between z-10">
+    <header className="h-16 border-b border-slate-200/80 bg-white/70 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between z-10 gap-2">
       
+      {/* Burger Menu Button (Mobile/Tablet) */}
+      <button
+        onClick={onMenuClick}
+        className="lg:hidden p-2 -ml-1 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors shrink-0"
+        title="Abrir menú"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
       {/* Search Input Box */}
       <div className="flex-1 max-w-xl relative">
         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">

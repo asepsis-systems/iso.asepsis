@@ -78,6 +78,7 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [creatorPendingCount, setCreatorPendingCount] = useState<number>(0);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   const [areas, setAreas] = useState<any[]>([]);
   const [auditList, setAuditList] = useState<any[]>([]);
@@ -1037,33 +1038,47 @@ export default function Dashboard() {
         className="hidden"
       />
 
+      {/* Mobile sidebar backdrop overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/60 z-30 lg:hidden animate-in fade-in duration-200"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar (Left) */}
-      <Sidebar
-        currentFilter={currentFilter}
-        setCurrentFilter={setCurrentFilter}
-        setCurrentParentId={setCurrentParentId}
-        totalStorageUsed={totalStorageUsed}
-        onNewFolder={() => {
-          if (currentFilter !== 'all') {
-            alert('Solo puedes crear carpetas dentro de la vista de archivos.');
-            return;
-          }
-          setIsFolderModalOpen(true);
-        }}
-        onUploadClick={() => {
-          if (!canUploadHere()) {
-            alert('Solo puedes subir archivos dentro de la vista de archivos.');
-            return;
-          }
-          fileInputRef.current?.click();
-        }}
-        user={user}
-        pendingCount={pendingCount}
-        creatorPendingCount={creatorPendingCount}
-      />
+      <div className={clsx(
+        "fixed inset-y-0 left-0 z-40 lg:static lg:translate-x-0 transition-transform duration-300 ease-in-out shrink-0",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <Sidebar
+          currentFilter={currentFilter}
+          setCurrentFilter={setCurrentFilter}
+          setCurrentParentId={setCurrentParentId}
+          totalStorageUsed={totalStorageUsed}
+          onNewFolder={() => {
+            if (currentFilter !== 'all') {
+              alert('Solo puedes crear carpetas dentro de la vista de archivos.');
+              return;
+            }
+            setIsFolderModalOpen(true);
+          }}
+          onUploadClick={() => {
+            if (!canUploadHere()) {
+              alert('Solo puedes subir archivos dentro de la vista de archivos.');
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
+          user={user}
+          pendingCount={pendingCount}
+          creatorPendingCount={creatorPendingCount}
+          onClose={() => setIsSidebarOpen(false)}
+        />
+      </div>
 
       {/* Main Container (Right) */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden w-full">
         
         {/* Header Search and Toggles */}
         <Header
@@ -1080,6 +1095,7 @@ export default function Dashboard() {
             }
             setIsProfileModalOpen(true);
           }}
+          onMenuClick={() => setIsSidebarOpen(true)}
         />
 
         {/* Dynamic Dashboard Body */}
@@ -1651,8 +1667,9 @@ export default function Dashboard() {
             ) : (
               
               /* VIEW MODE: LIST (Lista) */
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-premium">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-premium overflow-hidden">
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full min-w-[900px] text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                       <th className="p-4 w-12 text-center rounded-tl-2xl">Tipo</th>
@@ -1928,8 +1945,9 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
-            )
-          )}
+            </div>
+          )
+        )}
 
           </main>
         )}

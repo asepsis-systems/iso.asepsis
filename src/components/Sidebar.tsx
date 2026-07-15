@@ -10,7 +10,8 @@ import {
   FileCheck,
   FileText,
   Users,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -24,6 +25,7 @@ interface SidebarProps {
   user: { id: string; name: string; username: string; role: string } | null;
   pendingCount?: number;
   creatorPendingCount?: number;
+  onClose?: () => void;
 }
 
 export default function Sidebar({
@@ -35,7 +37,8 @@ export default function Sidebar({
   onUploadClick,
   user,
   pendingCount = 0,
-  creatorPendingCount = 0
+  creatorPendingCount = 0,
+  onClose
 }: SidebarProps) {
   
   const limitBytes = 100 * 1024 * 1024; // 100MB limit for demo
@@ -61,12 +64,22 @@ export default function Sidebar({
     if (filterId !== 'all') {
       setCurrentParentId(null);
     }
+    if (onClose) onClose(); // Auto-close sidebar on mobile after selecting a filter
   };
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col h-full z-10">
       {/* Brand Header */}
-      <div className="p-5 flex flex-col items-center justify-center border-b border-slate-800/60 bg-slate-950/20">
+      <div className="p-5 flex flex-col items-center justify-center border-b border-slate-800/60 bg-slate-950/20 relative">
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden absolute top-4 right-4 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            title="Cerrar menú"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         <img 
           src="/logo2.jpg" 
           alt="Asepsis Logo" 
@@ -81,14 +94,20 @@ export default function Sidebar({
       {/* Action Buttons */}
       <div className="p-4 flex flex-col gap-2">
         <button
-          onClick={onUploadClick}
+          onClick={() => {
+            onUploadClick();
+            if (onClose) onClose();
+          }}
           className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-medium text-sm transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-brand-500/10 active:scale-[0.98]"
         >
           <UploadCloud className="w-4 h-4" />
           <span>Subir Archivo</span>
         </button>
         <button
-          onClick={onNewFolder}
+          onClick={() => {
+            onNewFolder();
+            if (onClose) onClose();
+          }}
           className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/50 hover:border-slate-600/50 font-medium text-sm transition-all duration-300 active:scale-[0.98]"
         >
           <FolderPlus className="w-4 h-4 text-slate-400" />

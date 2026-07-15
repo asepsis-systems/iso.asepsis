@@ -1048,7 +1048,7 @@ export default function Dashboard() {
 
       {/* Sidebar (Left) */}
       <div className={clsx(
-        "fixed inset-y-0 left-0 z-40 lg:static lg:translate-x-0 transition-transform duration-300 ease-in-out shrink-0",
+        "fixed inset-y-0 left-0 h-full w-64 z-40 lg:static lg:translate-x-0 transition-transform duration-300 ease-in-out shrink-0",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <Sidebar
@@ -1078,7 +1078,7 @@ export default function Dashboard() {
       </div>
 
       {/* Main Container (Right) */}
-      <div className="flex-1 flex flex-col overflow-hidden w-full">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden w-full">
         
         {/* Header Search and Toggles */}
         <Header
@@ -1102,7 +1102,7 @@ export default function Dashboard() {
         {currentFilter === 'incidents' ? (
           <IncidentsDashboard user={user} />
         ) : (
-          <main className="flex-1 overflow-y-auto p-6 md:p-8">
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 w-full min-w-0">
           
           {/* Breadcrumbs Navigation Path */}
           {currentFilter === 'all' && (
@@ -1425,7 +1425,7 @@ export default function Dashboard() {
             
             /* VIEW MODE: GRID (Cuadrícula) */
             viewMode === 'grid' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-5">
                 {items.map((item) => (
                   <div
                     key={item.id}
@@ -1438,7 +1438,7 @@ export default function Dashboard() {
                     onDrop={item.type === 'FOLDER' ? (e) => handleDrop(e, item.id) : undefined}
                     onDoubleClick={() => handleItemDoubleClick(item)}
                     className={clsx(
-                      "group rounded-2xl border hover:shadow-premium hover:-translate-y-0.5 p-4 flex flex-col gap-3 relative transition-all duration-300 cursor-pointer select-none",
+                      "group rounded-2xl border hover:shadow-premium hover:-translate-y-0.5 p-3 md:p-4 flex flex-col gap-3 relative transition-all duration-300 cursor-pointer select-none",
                       dragOverFolderId === item.id 
                         ? "border-brand-500 bg-brand-50/50 scale-[1.02] shadow-md ring-2 ring-brand-500/20" 
                         : item.type === 'FOLDER' && item.areaFolder

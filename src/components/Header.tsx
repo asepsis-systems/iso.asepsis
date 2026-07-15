@@ -61,7 +61,7 @@ export default function Header({
       {/* Action panel (layout toggle, info card) */}
       <div className="flex items-center gap-4">
         {/* Layout Mode Toggle */}
-        <div className="bg-slate-100/80 p-0.5 rounded-lg border border-slate-200/60 flex items-center gap-0.5">
+        <div className="hidden sm:flex bg-slate-100/80 p-0.5 rounded-lg border border-slate-200/60 items-center gap-0.5">
           <button
             onClick={() => setViewMode('grid')}
             className={clsx(

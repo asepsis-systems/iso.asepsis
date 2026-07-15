@@ -1046,9 +1046,36 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Sidebar (Left) */}
+      {/* Desktop Sidebar (Left) */}
+      <div className="hidden lg:block w-64 h-full shrink-0">
+        <Sidebar
+          currentFilter={currentFilter}
+          setCurrentFilter={setCurrentFilter}
+          setCurrentParentId={setCurrentParentId}
+          totalStorageUsed={totalStorageUsed}
+          onNewFolder={() => {
+            if (currentFilter !== 'all') {
+              alert('Solo puedes crear carpetas dentro de la vista de archivos.');
+              return;
+            }
+            setIsFolderModalOpen(true);
+          }}
+          onUploadClick={() => {
+            if (!canUploadHere()) {
+              alert('Solo puedes subir archivos dentro de la vista de archivos.');
+              return;
+            }
+            fileInputRef.current?.click();
+          }}
+          user={user}
+          pendingCount={pendingCount}
+          creatorPendingCount={creatorPendingCount}
+        />
+      </div>
+
+      {/* Mobile Sidebar Drawer (Left) */}
       <div className={clsx(
-        "fixed inset-y-0 left-0 h-full w-64 z-40 lg:static lg:translate-x-0 transition-transform duration-300 ease-in-out shrink-0",
+        "lg:hidden fixed inset-y-0 left-0 h-full w-64 z-40 transition-transform duration-300 ease-in-out shrink-0",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <Sidebar

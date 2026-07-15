@@ -933,7 +933,7 @@ export default function IncidentsDashboard({ user }: IncidentsDashboardProps) {
                           setEditImagePreview(selectedIncident.imageUrl);
                           setIsEditing(true);
                         }}
-                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold text-xs transition-all duration-200 shadow-md shadow-indigo-500/10"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-500/80 to-brand-600/80 hover:from-brand-600 hover:to-brand-700 text-white font-bold text-xs transition-all duration-200 shadow-md shadow-brand-500/10"
                       >
                         Editar Reporte
                       </button>

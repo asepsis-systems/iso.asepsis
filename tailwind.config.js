@@ -10,17 +10,17 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          50: '#f0f4ff',
-          100: '#e1e9ff',
-          200: '#c8d7ff',
-          300: '#a1bbff',
-          400: '#7093ff',
-          500: '#4365ff', // Cobalt blue
-          600: '#263fff',
-          700: '#1b2eff',
-          800: '#1423d4',
-          900: '#1725a3',
-          950: '#0c1261',
+          50: '#f0f5ff',
+          100: '#e0ebff',
+          200: '#c7daff',
+          300: '#a3c1ff',
+          400: '#749fff',
+          500: '#3b71f7', // Softer premium sapphire slate-blue
+          600: '#2552e8',
+          700: '#1d3fd4',
+          800: '#1c35ad',
+          900: '#1c3289',
+          950: '#152054',
         },
         accent: {
           teal: '#0ea5e9',

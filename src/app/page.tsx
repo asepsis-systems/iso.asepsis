@@ -1075,7 +1075,7 @@ export default function Dashboard() {
 
       {/* Mobile Sidebar Drawer (Left) */}
       <div className={clsx(
-        "lg:hidden fixed inset-y-0 left-0 h-full w-64 z-40 transition-transform duration-300 ease-in-out shrink-0",
+        "lg:hidden fixed inset-y-0 left-0 h-full w-64 z-40 transform transition-transform duration-300 ease-in-out shrink-0",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <Sidebar

@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   description: 'Un panel de control premium para organizar, previsualizar y gestionar tus documentos, hojas de cálculo y PDFs.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: {

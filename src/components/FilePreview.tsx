@@ -745,80 +745,85 @@ export default function FilePreview({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-all duration-300">
-      <div className={`bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col transition-all duration-300 border border-slate-200/80 ${
-        isFullscreen ? 'w-full h-full p-2' : 'w-full max-w-5xl h-[85vh]'
-      }`}>
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 transition-all duration-300">
+      <div className={clsx(
+        "bg-white shadow-2xl overflow-hidden flex flex-col transition-all duration-300",
+        isFullscreen 
+          ? 'w-full h-full p-2 rounded-none' 
+          : 'w-full max-w-5xl h-full sm:h-[85vh] rounded-none sm:rounded-3xl border-0 sm:border border-slate-200/80'
+      )}>
         
         {/* Preview Header */}
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+        <div className="px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center justify-between shrink-0">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
               isPDF ? 'bg-red-50 text-red-500' :
               isExcel ? 'bg-emerald-50 text-emerald-600' :
               isWord ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'
             }`}>
               {isExcel ? <FileSpreadsheet className="w-4.5 h-4.5" /> : <FileText className="w-4.5 h-4.5" />}
             </div>
-            <div>
-              <h2 className="font-bold text-slate-800 text-sm max-w-[250px] md:max-w-md truncate" title={fileName}>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-bold text-slate-800 text-xs sm:text-sm max-w-[200px] xs:max-w-[250px] sm:max-w-md truncate" title={fileName}>
                 {fileName}
               </h2>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-                <p className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">
-                  {isPDF ? 'PDF Document' : isExcel ? 'Excel Spreadsheet' : isWord ? 'Word Document' : 'Archivo'} • {formatSize(fileSize)}
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1">
+                <p className="text-[9px] sm:text-[10px] text-slate-400 font-semibold tracking-wider uppercase shrink-0">
+                  {isPDF ? 'PDF' : isExcel ? 'Excel' : isWord ? 'Word' : 'Archivo'} • {formatSize(fileSize)}
                 </p>
                 {(creator || verifier1 || verifier2 || verifier3) && (
-                  <span className="text-[10px] text-slate-300 select-none">•</span>
+                  <span className="text-[10px] text-slate-300 select-none hidden xs:inline">•</span>
                 )}
-                {creator && (
-                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-bold border border-slate-200">
-                    Creador: {creator}
-                  </span>
-                )}
-                {verifier1 && (
-                  <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-bold border border-blue-100">
-                    Verif 1: {verifier1}
-                  </span>
-                )}
-                {verifier2 && (
-                  <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 text-[9px] font-bold border border-purple-100">
-                    Verif 2: {verifier2}
-                  </span>
-                )}
-                {verifier3 && (
-                  <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[9px] font-bold border border-indigo-100">
-                    Verif 3: {verifier3}
-                  </span>
-                )}
+                <div className="flex flex-wrap items-center gap-1">
+                  {creator && (
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[8.5px] sm:text-[9px] font-bold border border-slate-200 truncate max-w-[90px]" title={creator}>
+                      Cr: {creator}
+                    </span>
+                  )}
+                  {verifier1 && (
+                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[8.5px] sm:text-[9px] font-bold border border-blue-100 truncate max-w-[90px]" title={verifier1}>
+                      V1: {verifier1}
+                    </span>
+                  )}
+                  {verifier2 && (
+                    <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 text-[8.5px] sm:text-[9px] font-bold border border-purple-100 truncate max-w-[90px]" title={verifier2}>
+                      V2: {verifier2}
+                    </span>
+                  )}
+                  {verifier3 && (
+                    <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[8.5px] sm:text-[9px] font-bold border border-indigo-100 truncate max-w-[90px]" title={verifier3}>
+                      V3: {verifier3}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0">
             {isPDF && (
               <button
                 onClick={() => setIsPlacingSignature(!isPlacingSignature)}
                 className={clsx(
-                  "mr-2 px-3 py-1.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 active:scale-95",
+                  "px-2.5 sm:px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95",
                   isPlacingSignature 
                     ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
                     : "bg-slate-200/80 hover:bg-slate-300/80 text-slate-700"
                 )}
                 title={isPlacingSignature ? "Ocultar panel de herramientas" : "Mostrar panel de herramientas"}
               >
-                <Pencil className="w-4 h-4" />
-                <span>{isPlacingSignature ? "Ocultar Herramientas" : "Anotar / Firmar"}</span>
+                <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>{isPlacingSignature ? "Ocultar" : "Anotar / Firmar"}</span>
               </button>
             )}
 
             {canSign && onVerify && !isPlacingSignature && (
               <button
                 onClick={handleSignClick}
-                className="mr-2 px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 active:scale-95 animate-pulse"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[10px] sm:text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95 animate-pulse"
                 title="Firmar / Verificar este documento"
               >
-                <FileCheck className="w-4 h-4" />
+                <FileCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span>Firmar Documento</span>
               </button>
             )}
@@ -826,10 +831,10 @@ export default function FilePreview({
             {canSign && onReject && !isPlacingSignature && (
               <button
                 onClick={onReject}
-                className="mr-2 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 active:scale-95"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[10px] sm:text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95"
                 title="Rechazar este documento"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span>Rechazar</span>
               </button>
             )}
@@ -837,45 +842,45 @@ export default function FilePreview({
             {hasUserSigned && onRemoveVerify && (
               <button
                 onClick={onRemoveVerify}
-                className="mr-2 px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 active:scale-95"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[10px] sm:text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95"
                 title="Remover mi firma de este documento"
               >
-                <X className="w-4 h-4" />
-                <span>Remover mi Firma</span>
+                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Remover Firma</span>
               </button>
             )}
 
             {canTrash && onTrash && (
               <button
                 onClick={onTrash}
-                className="p-2 rounded-xl text-rose-500 hover:text-red-600 hover:bg-rose-50 transition-colors"
+                className="p-1.5 sm:p-2 rounded-xl text-rose-500 hover:text-red-600 hover:bg-rose-50 transition-colors"
                 title="Mover a la papelera"
               >
-                <Trash2 className="w-4.5 h-4.5" />
+                <Trash2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
               </button>
             )}
 
             {/* Zoom controls */}
             {isPDF && (
-              <div className="flex items-center gap-1 bg-slate-200/60 rounded-xl p-0.5 mr-2">
+              <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-200/60 rounded-xl p-0.5">
                 <button
                   type="button"
                   onClick={() => setZoom(prev => Math.max(1.0, prev - 0.25))}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white transition-colors"
+                  className="p-1 sm:p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white transition-colors"
                   title="Alejar (Zoom Out)"
                 >
-                  <ZoomOut className="w-4 h-4" />
+                  <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
-                <span className="text-[10px] font-bold text-slate-600 px-1 select-none">
+                <span className="text-[9px] sm:text-[10px] font-bold text-slate-600 px-0.5 sm:px-1 select-none">
                   {Math.round(zoom * 100)}%
                 </span>
                 <button
                   type="button"
                   onClick={() => setZoom(prev => Math.min(2.5, prev + 0.25))}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white transition-colors"
+                  className="p-1 sm:p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white transition-colors"
                   title="Acercar (Zoom In)"
                 >
-                  <ZoomIn className="w-4 h-4" />
+                  <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             )}
@@ -922,11 +927,19 @@ export default function FilePreview({
         </div>
 
         {/* Preview Area Body */}
-        <div className="flex-1 bg-slate-100 overflow-hidden flex">
+        <div className="flex-1 bg-slate-100 overflow-hidden flex relative">
           
+          {/* Mobile Sidebar Backdrop */}
+          {isPlacingSignature && (
+            <div 
+              onClick={() => setIsPlacingSignature(false)}
+              className="md:hidden fixed inset-0 z-30 bg-slate-950/40 backdrop-blur-xs transition-opacity duration-300"
+            />
+          )}
+
           {/* Signature Mode Sidebar */}
           {isPlacingSignature && (
-            <div className="w-80 border-r border-slate-200 bg-white flex shrink-0 animate-in slide-in-from-left duration-200">
+            <div className="fixed inset-y-0 left-0 z-40 w-72 md:w-80 border-r border-slate-200 bg-white flex shrink-0 shadow-2xl md:shadow-none md:static animate-in slide-in-from-left duration-200">
               
               {/* Left Toolbar Column (Narrow) */}
               <div className="w-14 border-r border-slate-200 bg-slate-50/80 flex flex-col items-center py-4 justify-between">

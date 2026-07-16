@@ -21,7 +21,11 @@ import {
   FileCheck,
   Users,
   Clock,
-  UploadCloud
+  UploadCloud,
+  Menu,
+  X,
+  LogOut,
+  Search
 } from 'lucide-react';
 
 import Sidebar from '@/components/Sidebar';
@@ -981,6 +985,15 @@ export default function Dashboard() {
     });
   };
 
+  const formatDateMobile = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${day}/${month} ${hours}:${minutes}`;
+  };
+
   const formatSize = (bytes?: number) => {
     if (bytes === undefined || bytes === 0) return '-';
     const k = 1024;
@@ -1125,11 +1138,98 @@ export default function Dashboard() {
           onMenuClick={() => setIsSidebarOpen(true)}
         />
 
+        {/* MOBILE TOP DARK NAVY CARD HEADER (lg:hidden) */}
+        <div className="lg:hidden bg-slate-950 p-4 pb-6 rounded-b-[2.5rem] shadow-xl relative shrink-0 border-b border-slate-850">
+          {/* Top Row: Hamburger, Logo/Brand, Logout */}
+          <div className="flex items-center justify-between gap-4 mb-5">
+            {/* Hamburger Toggle */}
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 bg-slate-900 border border-slate-800/80 rounded-xl text-slate-300 active:scale-95 hover:text-white hover:bg-slate-800 transition-all shrink-0"
+              title="Menú"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Brand Logo & Name */}
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800/60 px-3.5 py-1.5 rounded-2xl shadow-inner max-w-full">
+              <span className="text-[10px] tracking-wider uppercase font-black text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded-lg border border-brand-500/15 truncate shrink-0">
+                T&CH ASEPSIS
+              </span>
+              <span className="text-white text-xs font-black tracking-tight shrink-0">ISO-ASEPSIS</span>
+            </div>
+
+            {/* Logout Button */}
+            <button 
+              onClick={handleLogout}
+              className="p-2 bg-slate-900 border border-slate-800/80 rounded-xl text-slate-400 active:scale-95 hover:text-rose-400 hover:bg-rose-950/20 transition-all shrink-0"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Bottom Row: Primary Action Buttons */}
+          <div className="flex flex-col gap-2.5">
+            <button
+              onClick={() => {
+                if (!canUploadHere()) {
+                  alert('Solo puedes subir archivos dentro de la vista de archivos.');
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-brand-500 via-brand-600 to-indigo-600 text-white font-bold text-xs shadow-lg shadow-brand-500/15 hover:shadow-xl transition-all active:scale-[0.98] duration-200 flex items-center justify-center gap-2"
+            >
+              <Upload className="w-3.5 h-3.5 text-white animate-pulse" />
+              <span>Subir Archivo</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                if (currentFilter !== 'all') {
+                  alert('Solo puedes crear carpetas dentro de la vista de archivos.');
+                  return;
+                }
+                setIsFolderModalOpen(true);
+              }}
+              className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs border border-slate-800/80 transition-all active:scale-[0.98] duration-200 flex items-center justify-center gap-2"
+            >
+              <FolderPlus className="w-3.5 h-3.5 text-slate-400" />
+              <span>Nueva Carpeta</span>
+            </button>
+          </div>
+        </div>
+
         {/* Dynamic Dashboard Body */}
         {currentFilter === 'incidents' ? (
           <IncidentsDashboard user={user} />
         ) : (
           <main className="flex-1 overflow-y-auto p-4 md:p-8 w-full min-w-0">
+          
+          {/* Mobile Search Input (lg:hidden) */}
+          {currentFilter !== 'users' && currentFilter !== 'audit' && (
+            <div className="lg:hidden mb-6 relative">
+              <input
+                type="text"
+                placeholder="Buscar en Mi Unidad..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-2xl shadow-sm text-xs font-semibold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-slate-800 transition-all"
+              />
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-4 h-4" />
+              </div>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 active:scale-90 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
           
           {/* Breadcrumbs Navigation Path */}
           {currentFilter === 'all' && (
@@ -1692,155 +1792,284 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              
-              /* VIEW MODE: LIST (Lista) */
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-premium overflow-hidden">
-                <div className="overflow-x-auto w-full">
-                  <table className="w-full min-w-[900px] text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                      <th className="p-4 w-12 text-center rounded-tl-2xl">Tipo</th>
-                      <th className="p-4 text-slate-700 font-bold text-sm">Nombre</th>
-                      <th className="p-4 w-28">Estado</th>
-                      <th className="p-4 w-32">Fecha de Creación</th>
-                      <th className="p-4 w-28">Elaborado <><br />por</></th>
-                      {currentArea ? (
-                        <th className="p-4 w-48 text-slate-700 font-bold text-sm">Flujo de Firmas ({currentArea.name})</th>
-                      ) : (
-                        <>
-                          <th className="p-4 w-24">Verificador 1</th>
-                          <th className="p-4 w-24">Verificador 2</th>
-                          <th className="p-4 w-24">Verificador 3</th>
-                        </>
-                      )}
-                      <th className="p-4 w-24">Tamaño</th>
-                      <th className="p-4 w-20 text-center rounded-tr-2xl">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => (
-                      <tr 
-                        key={item.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, item.id)}
-                        onDragEnd={handleDragEnd}
-                        onDragOver={item.type === 'FOLDER' ? (e) => handleDragOver(e, item.id) : undefined}
-                        onDragEnter={item.type === 'FOLDER' ? () => handleDragEnter(item.id) : undefined}
-                        onDragLeave={item.type === 'FOLDER' ? () => handleDragLeave(item.id) : undefined}
-                        onDrop={item.type === 'FOLDER' ? (e) => handleDrop(e, item.id) : undefined}
-                        onDoubleClick={() => handleItemDoubleClick(item)}
-                        className={clsx(
-                          "border-b cursor-pointer select-none transition-all duration-200 group",
-                          dragOverFolderId === item.id 
-                            ? "bg-brand-50 border-brand-300 shadow-inner font-semibold" 
-                            : item.type === 'FOLDER' && item.areaFolder
-                              ? getAreaColorClasses((item.areaFolder as any).color).bg.split(' ')[0] + " border-slate-100 hover:bg-slate-50/50"
-                              : "border-slate-100 hover:bg-slate-50/50"
-                        )}
-                      >
-                        <td className="p-4 flex justify-center">
-                          <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors">
-                            {getFileIcon(item)}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-800 text-sm truncate max-w-xs md:max-w-md" title={item.name}>
-                              {item.name}
-                            </span>
-                            {item.isStarred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          {item.type === 'FILE' && (() => {
-                            const status = getVerificationStatus(item);
-                            if (!status) return null;
-                            return (
-                              <span className={clsx("px-2.5 py-1 rounded-full text-[10px] font-bold border inline-block", status.color)}>
-                                {status.label}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="p-4 text-slate-400 font-semibold">{formatDate(item.createdAt)}</td>
-                        <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.creator || '-'}</td>
-                        {currentArea ? (
-                          <td className="p-4">
-                            {item.type === 'FILE' && (
-                              <div className="flex flex-col gap-1">
-                                {currentArea.verifiers.map((v: any) => {
-                                  const status = getVerifierSignatureStatus(item, v.userId);
-                                  return (
-                                    <div key={v.id} className="flex items-center gap-1.5">
-                                      <span className={clsx(
-                                        "w-2 h-2 rounded-full shrink-0",
-                                        status === 'APROBADO' ? "bg-emerald-500" :
-                                        status === 'RECHAZADO' ? "bg-rose-500" : "bg-slate-300"
-                                      )} />
-                                      <span className={clsx(
-                                        "text-[10px] font-semibold",
-                                        status === 'APROBADO' ? "text-emerald-700 font-bold" :
-                                        status === 'RECHAZADO' ? "text-rose-700 font-bold" : "text-slate-500"
-                                      )}>
-                                        {v.user.name} ({status === 'APROBADO' ? 'Firmado' : status === 'RECHAZADO' ? 'Rechazado' : 'Pendiente'})
+                  /* VIEW MODE: LIST (Lista) */
+                  <>
+                    {/* Desktop List Mode (>= lg) */}
+                    <div className="hidden lg:block bg-white rounded-2xl border border-slate-200/80 shadow-premium overflow-hidden">
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full min-w-[900px] text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                              <th className="p-4 w-12 text-center rounded-tl-2xl">Tipo</th>
+                              <th className="p-4 text-slate-700 font-bold text-sm">Nombre</th>
+                              <th className="p-4 w-28">Estado</th>
+                              <th className="p-4 w-32">Fecha de Creación</th>
+                              <th className="p-4 w-28">Elaborado <><br />por</></th>
+                              {currentArea ? (
+                                <th className="p-4 w-48 text-slate-700 font-bold text-sm">Flujo de Firmas ({currentArea.name})</th>
+                              ) : (
+                                <>
+                                  <th className="p-4 w-24">Verificador 1</th>
+                                  <th className="p-4 w-24">Verificador 2</th>
+                                  <th className="p-4 w-24">Verificador 3</th>
+                                </>
+                              )}
+                              <th className="p-4 w-24">Tamaño</th>
+                              <th className="p-4 w-20 text-center rounded-tr-2xl">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((item) => (
+                              <tr 
+                                key={item.id}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, item.id)}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={item.type === 'FOLDER' ? (e) => handleDragOver(e, item.id) : undefined}
+                                onDragEnter={item.type === 'FOLDER' ? () => handleDragEnter(item.id) : undefined}
+                                onDragLeave={item.type === 'FOLDER' ? () => handleDragLeave(item.id) : undefined}
+                                onDrop={item.type === 'FOLDER' ? (e) => handleDrop(e, item.id) : undefined}
+                                onDoubleClick={() => handleItemDoubleClick(item)}
+                                className={clsx(
+                                  "border-b cursor-pointer select-none transition-all duration-200 group",
+                                  dragOverFolderId === item.id 
+                                    ? "bg-brand-50 border-brand-300 shadow-inner font-semibold" 
+                                    : item.type === 'FOLDER' && item.areaFolder
+                                      ? getAreaColorClasses((item.areaFolder as any).color).bg.split(' ')[0] + " border-slate-100 hover:bg-slate-50/50"
+                                      : "border-slate-100 hover:bg-slate-50/50"
+                                )}
+                              >
+                                <td className="p-4 flex justify-center">
+                                  <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors">
+                                    {getFileIcon(item)}
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-800 text-sm truncate max-w-xs md:max-w-md" title={item.name}>
+                                      {item.name}
+                                    </span>
+                                    {item.isStarred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
+                                  </div>
+                                </td>
+                                <td className="p-4">
+                                  {item.type === 'FILE' && (() => {
+                                    const status = getVerificationStatus(item);
+                                    if (!status) return null;
+                                    return (
+                                      <span className={clsx("px-2.5 py-1 rounded-full text-[10px] font-bold border inline-block", status.color)}>
+                                        {status.label}
                                       </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </td>
-                        ) : (
-                          <>
-                            <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier1 || '-'}</td>
-                            <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier2 || '-'}</td>
-                            <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.verifier3 || '-'}</td>
-                          </>
-                        )}
-                        <td className="p-4 text-slate-400 font-semibold">{item.type === 'FOLDER' ? 'Carpeta' : formatSize(item.size)}</td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {canUserSign(item) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleItemDoubleClick(item);
-                                }}
-                                className="px-2.5 py-1 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-[10px] font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1 active:scale-95 shrink-0"
-                                title="Firmar / Verificar"
-                              >
-                                <FileCheck className="w-3.5 h-3.5" />
-                                <span>Firmar</span>
-                              </button>
-                            )}
+                                    );
+                                  })()}
+                                </td>
+                                <td className="p-4 text-slate-400 font-semibold">{formatDate(item.createdAt)}</td>
+                                <td className="p-4 text-slate-600 font-semibold truncate max-w-[120px]">{item.creator || '-'}</td>
+                                {currentArea ? (
+                                  <td className="p-4">
+                                    {item.type === 'FILE' && (
+                                      <div className="flex flex-col gap-1">
+                                        {currentArea.verifiers.map((v: any) => {
+                                          const status = getVerifierSignatureStatus(item, v.userId);
+                                          return (
+                                            <div key={v.id} className="flex items-center gap-1.5">
+                                              <span className={clsx(
+                                                "w-2 h-2 rounded-full shrink-0",
+                                                status === 'APROBADO' ? "bg-emerald-500" :
+                                                status === 'RECHAZADO' ? "bg-rose-500" : "bg-slate-300"
+                                              )} />
+                                              <span className={clsx(
+                                                "text-[10px] font-bold tracking-tight",
+                                                status === 'APROBADO' ? "text-emerald-600" :
+                                                status === 'RECHAZADO' ? "text-rose-600" : "text-slate-500"
+                                              )}>
+                                                {v.user.name}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </td>
+                                ) : (
+                                  <>
+                                    <td className="p-4">
+                                      <span className="text-slate-600 font-semibold">{item.verifier1 || '-'}</span>
+                                    </td>
+                                    <td className="p-4">
+                                      <span className="text-slate-600 font-semibold">{item.verifier2 || '-'}</span>
+                                    </td>
+                                    <td className="p-4">
+                                      <span className="text-slate-600 font-semibold">{item.verifier3 || '-'}</span>
+                                    </td>
+                                  </>
+                                )}
+                                <td className="p-4 text-slate-400 font-semibold">{item.type === 'FOLDER' ? 'Carpeta' : formatSize(item.size)}</td>
+                                <td className="p-4 text-center">
+                                  <div className="relative inline-block text-left">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveMenuId(activeMenuId === item.id ? null : item.id);
+                                      }}
+                                      className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 ml-auto transition-colors"
+                                    >
+                                      <MoreVertical className="w-4 h-4" />
+                                    </button>
+                                    
+                                    {/* List Dropdown Menu */}
+                                    {activeMenuId === item.id && (
+                                      <div 
+                                        ref={menuRef}
+                                        className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-200/80 py-1.5 z-20 text-xs font-semibold text-slate-600 text-left animate-in fade-in slide-in-from-top-2 duration-150"
+                                      >
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleItemDoubleClick(item);
+                                            setActiveMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 hover:bg-slate-50 transition-colors"
+                                        >
+                                          Abrir
+                                        </button>
+                                        {item.type === 'FILE' && !item.isTrashed && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleItemDoubleClick(item);
+                                              setActiveMenuId(null);
+                                            }}
+                                            className="w-full text-left px-4 py-2 hover:bg-brand-50 hover:text-brand-600 text-brand-700 transition-colors flex items-center gap-2 border-b border-slate-100 font-bold"
+                                          >
+                                            <FileCheck className="w-3.5 h-3.5 text-brand-500" />
+                                            <span>Firmar / Verificar</span>
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleStar(item);
+                                            setActiveMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                                        >
+                                          <Star className={clsx("w-3.5 h-3.5", item.isStarred ? "text-amber-500 fill-amber-500" : "text-slate-400")} />
+                                          <span>{item.isStarred ? 'Quitar Destacado' : 'Destacar'}</span>
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setRenameItemId(item.id);
+                                            setRenameItemName(item.name);
+                                            setIsRenameModalOpen(true);
+                                            setActiveMenuId(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5 text-slate-400" />
+                                          <span>Renombrar</span>
+                                        </button>
+                                        {canDeleteNode(item) && (
+                                          item.isTrashed ? (
+                                            <>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleTrashToggle(item);
+                                                  setActiveMenuId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700 transition-colors flex items-center gap-2"
+                                              >
+                                                <RotateCcw className="w-3.5 h-3.5 text-indigo-500" />
+                                                <span>Restaurar</span>
+                                              </button>
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handlePermanentDelete(item.id);
+                                                  setActiveMenuId(null);
+                                                }}
+                                                className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                                <span>Eliminar definitivamente</span>
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleTrashToggle(item);
+                                                setActiveMenuId(null);
+                                              }}
+                                              className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                              <span>Mover a papelera</span>
+                                            </button>
+                                          )
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
 
-                            {!item.isTrashed && canDeleteNode(item) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (confirm(item.type === 'FOLDER' ? '¿Estás seguro de que deseas mover esta carpeta a la papelera?' : '¿Estás seguro de que deseas mover este archivo a la papelera?')) {
-                                    handleTrashToggle(item);
-                                  }
-                                }}
-                                className="p-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-xs border border-rose-100 flex items-center justify-center shrink-0"
-                                title="Mover a la papelera"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            
+                    {/* Mobile List Mode (< lg) */}
+                    <div className="lg:hidden flex flex-col gap-3.5">
+                      <div className="flex items-center justify-between text-xs text-slate-400 font-bold px-1.5 uppercase tracking-wider">
+                        <span>Tipo</span>
+                        <span>Nombre</span>
+                      </div>
+                      {items.map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => handleItemDoubleClick(item)}
+                          className={clsx(
+                            "p-4 rounded-2xl border flex items-center justify-between gap-3 active:scale-[0.99] transition-all bg-white shadow-xs",
+                            item.type === 'FOLDER' && item.areaFolder
+                              ? getAreaColorClasses((item.areaFolder as any).color).bg.split(' ')[0] + " border-slate-100"
+                              : "border-slate-100/80"
+                          )}
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            {/* Icon */}
+                            <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm bg-slate-50 border border-slate-100">
+                              {getFileIcon(item)}
+                            </div>
+                            {/* Title & Metadata */}
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-slate-800 text-sm truncate pr-1">
+                                {item.name}
+                              </h4>
+                              <p className="text-[11px] text-slate-400 font-semibold mt-0.5 truncate">
+                                {item.type === 'FOLDER' ? 'Carpeta' : formatSize(item.size)} • {formatDate(item.updatedAt)}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Actions/Star/Verification */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.isStarred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
+                            {/* Menu / Actions Button */}
                             <div className="relative">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActiveMenuId(activeMenuId === item.id ? null : item.id);
                                 }}
-                                className="p-1 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                                className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100 flex items-center justify-center text-slate-500 active:scale-95 transition-all"
                               >
                                 <MoreVertical className="w-4 h-4" />
                               </button>
                               
-                              {/* List Dropdown Menu */}
+                              {/* Dropdown menu for mobile rows */}
                               {activeMenuId === item.id && (
                                 <div 
                                   ref={menuRef}
@@ -1893,35 +2122,6 @@ export default function Dashboard() {
                                     <Edit3 className="w-3.5 h-3.5 text-slate-400" />
                                     <span>Renombrar</span>
                                   </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDetailsItemId(item.id);
-                                      setDetailsCreator(item.creator || '');
-                                      setDetailsVerifier1(item.verifier1 || '');
-                                      setDetailsVerifier2(item.verifier2 || '');
-                                      setDetailsVerifier3(item.verifier3 || '');
-                                      setIsDetailsModalOpen(true);
-                                      setActiveMenuId(null);
-                                    }}
-                                    className="w-full text-left px-4 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>Editar Detalles</span>
-                                  </button>
-                                  {item.type === 'FOLDER' && item.areaFolder && user?.role === 'ADMIN' && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleConfigureVerifiersClick(item.areaFolder);
-                                        setActiveMenuId(null);
-                                      }}
-                                      className="w-full text-left px-4 py-2 hover:bg-brand-50 hover:text-brand-600 text-brand-700 font-bold transition-colors flex items-center gap-2 border-b border-slate-100"
-                                    >
-                                      <Users className="w-3.5 h-3.5 text-brand-500" />
-                                      <span>Configurar Verificadores</span>
-                                    </button>
-                                  )}
                                   {canDeleteNode(item) && (
                                     item.isTrashed ? (
                                       <>
@@ -1966,15 +2166,12 @@ export default function Dashboard() {
                               )}
                             </div>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )
-        )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )
+              )}
 
           </main>
         )}

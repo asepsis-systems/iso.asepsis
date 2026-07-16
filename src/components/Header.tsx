@@ -33,7 +33,7 @@ export default function Header({
   };
 
   return (
-    <header className="h-16 border-b border-slate-200/80 bg-white/70 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between z-10 gap-2">
+    <header className="hidden lg:flex h-16 border-b border-slate-200/80 bg-white/70 backdrop-blur-md px-6 items-center justify-between z-10 gap-2">
       
       {/* Burger Menu Button (Mobile/Tablet) */}
       <button

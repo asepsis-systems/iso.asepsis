@@ -163,7 +163,7 @@ export default function Sidebar({
               "w-4 h-4 transition-colors shrink-0",
               currentFilter === 'incidents' ? "text-rose-400" : "text-slate-500 group-hover:text-rose-400"
             )} />
-            <span>Reportar Incidentes</span>
+            <span>Reporte de Incidentes</span>
           </button>
         </div>
 

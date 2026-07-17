@@ -1385,8 +1385,8 @@ export default function Dashboard() {
                       key={u.id}
                       className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors group"
                     >
-                      <td className="p-4 flex justify-center">
-                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors">
+                      <td className="p-4 text-center align-middle">
+                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors mx-auto">
                           <Users className="w-4 h-4 text-brand-500" />
                         </div>
                       </td>
@@ -1839,8 +1839,8 @@ export default function Dashboard() {
                                       : "border-slate-100 hover:bg-slate-50/50"
                                 )}
                               >
-                                <td className="p-4 flex justify-center">
-                                  <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors">
+                                <td className="p-4 text-center align-middle">
+                                  <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-brand-50 transition-colors mx-auto">
                                     {getFileIcon(item)}
                                   </div>
                                 </td>

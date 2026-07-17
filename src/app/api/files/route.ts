@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth-helpers';
 import fs from 'fs';
 import path from 'path';
-import { canUserAccessNode, getNodeName, logAuthorization } from '@/lib/permission';
+import { canUserAccessNode, getNodeName, logAuthorization, findAreaForNode } from '@/lib/permission';
 
 export async function GET(request: NextRequest) {
   try {
@@ -523,7 +523,10 @@ export async function PUT(request: NextRequest) {
           return NextResponse.json({ error: 'Solo los administradores pueden mover carpetas principales de área a la papelera.' }, { status: 403 });
         }
       } else {
-        if (currentUser.role !== 'ADMIN' && existingNode?.creator !== currentUser.name) {
+        const nodeArea = await findAreaForNode(id);
+        const isAreaCreator = nodeArea && currentUser.role === 'CREATOR' && currentUser.areaId === nodeArea.id;
+
+        if (currentUser.role !== 'ADMIN' && existingNode?.creator !== currentUser.name && !isAreaCreator) {
           return NextResponse.json({ error: 'No tienes permisos para mover este elemento a la papelera.' }, { status: 403 });
         }
       }
@@ -624,7 +627,10 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ error: 'Solo los administradores pueden eliminar carpetas principales de área.' }, { status: 403 });
       }
     } else {
-      if (currentUser.role !== 'ADMIN' && node.creator !== currentUser.name) {
+      const nodeArea = await findAreaForNode(id);
+      const isAreaCreator = nodeArea && currentUser.role === 'CREATOR' && currentUser.areaId === nodeArea.id;
+
+      if (currentUser.role !== 'ADMIN' && node.creator !== currentUser.name && !isAreaCreator) {
         return NextResponse.json({ error: 'No tienes permisos para eliminar este elemento.' }, { status: 403 });
       }
     }

@@ -48,7 +48,6 @@ model User {
   signatures Signature[]
   area       Area?       @relation("UserArea", fields: [areaId], references: [id])
   verifiers  Verifier[]
-  incidents  Incident[]
 
   @@index([areaId])
 }
@@ -196,21 +195,21 @@ model Task {
 }
 
 model Tarea {
-  id                   String   @id @default(uuid())
+  id                   String         @id @default(uuid())
   responsable          String
-  descripcion          String   @db.Text
-  estado               String   @default("PENDIENTE")
-  fecha_creacion       DateTime @default(now())
-  fecha_actualizacion  DateTime @updatedAt
+  descripcion          String         @db.Text
+  estado               String         @default("PENDIENTE")
+  fecha_creacion       DateTime       @default(now())
+  fecha_actualizacion  DateTime       @updatedAt
   cantidad             String?
   equipo               String?
-  falla                String?  @db.Text
+  falla                String?        @db.Text
   fecha                String?
   itemNumber           Int?
   repuestos            String?
   sede                 String?
   tipo                 String?
-  esRecurrente         Boolean  @default(true)
+  esRecurrente         Boolean        @default(true)
   fechaUltimaEjecucion String?
   frecuenciaMeses      Int?
   proximaEjecucion     String?
@@ -218,6 +217,7 @@ model Tarea {
   certificadoNombre    String?
   certificadoPath      String?
   fechaCulminado       String?
+  TareaArchivo         TareaArchivo[]
 
   @@map("Tarea")
 }
@@ -305,16 +305,13 @@ model LicenciaCarpeta {
   licenses  License[] @relation("FolderLicenses")
 }
 
-model Incident {
-  id          String   @id @default(uuid())
-  title       String
-  area        String   // Área afectada (Operaciones, Logística, Mantenimiento, Administración, General)
-  description String   @db.Text
-  imageUrl    String?  // Ruta local o URL de Supabase para la foto
-  status      String   @default("Pendiente") // Pendiente, En Revisión, Solucionado
-  createdAt   DateTime @default(now())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model TareaArchivo {
+  id           String   @id
+  tareaId      String
+  originalName String
+  path         String
+  createdAt    DateTime @default(now())
+  Tarea        Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([tareaId])
 }

@@ -1796,7 +1796,7 @@ export default function Dashboard() {
                   <>
                     {/* Desktop List Mode (>= lg) */}
                     <div className="hidden lg:block bg-white rounded-2xl border border-slate-200/80 shadow-premium overflow-hidden">
-                      <div className="overflow-x-auto w-full">
+                      <div className="overflow-x-auto w-full min-h-[300px]">
                         <table className="w-full min-w-[900px] text-left border-collapse text-xs">
                           <thead>
                             <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
@@ -1819,7 +1819,7 @@ export default function Dashboard() {
                             </tr>
                           </thead>
                           <tbody>
-                            {items.map((item) => (
+                            {items.map((item, index) => (
                               <tr 
                                 key={item.id}
                                 draggable
@@ -1921,7 +1921,12 @@ export default function Dashboard() {
                                     {activeMenuId === item.id && (
                                       <div 
                                         ref={menuRef}
-                                        className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-200/80 py-1.5 z-20 text-xs font-semibold text-slate-600 text-left animate-in fade-in slide-in-from-top-2 duration-150"
+                                        className={clsx(
+                                          "absolute right-0 w-44 bg-white rounded-xl shadow-xl border border-slate-200/80 py-1.5 z-20 text-xs font-semibold text-slate-600 text-left animate-in fade-in duration-150",
+                                          (index === items.length - 1 && items.length > 1)
+                                            ? "bottom-full mb-1 slide-in-from-bottom-2"
+                                            : "mt-1 slide-in-from-top-2"
+                                        )}
                                       >
                                         <button
                                           onClick={(e) => {

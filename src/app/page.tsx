@@ -1906,16 +1906,31 @@ export default function Dashboard() {
                                 )}
                                 <td className="p-4 text-slate-400 font-semibold">{item.type === 'FOLDER' ? 'Carpeta' : formatSize(item.size)}</td>
                                 <td className="p-4 text-center">
-                                  <div className="relative inline-block text-left">
-                                    <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActiveMenuId(activeMenuId === item.id ? null : item.id);
-                                      }}
-                                      className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 ml-auto transition-colors"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {!item.isTrashed && canDeleteNode(item) && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (confirm(item.type === 'FOLDER' ? '¿Estás seguro de que deseas mover esta carpeta a la papelera?' : '¿Estás seguro de que deseas mover este archivo a la papelera?')) {
+                                            handleTrashToggle(item);
+                                          }
+                                        }}
+                                        className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-xs border border-rose-100 flex items-center justify-center shrink-0"
+                                        title="Mover a la papelera"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <div className="relative inline-block text-left">
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveMenuId(activeMenuId === item.id ? null : item.id);
+                                        }}
+                                        className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 ml-auto transition-colors"
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                      </button>
                                     
                                     {/* List Dropdown Menu */}
                                     {activeMenuId === item.id && (
@@ -2005,7 +2020,9 @@ export default function Dashboard() {
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleTrashToggle(item);
+                                                if (confirm(item.type === 'FOLDER' ? '¿Estás seguro de que deseas mover esta carpeta a la papelera?' : '¿Estás seguro de que deseas mover este archivo a la papelera?')) {
+                                                  handleTrashToggle(item);
+                                                }
                                                 setActiveMenuId(null);
                                               }}
                                               className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition-colors flex items-center gap-2 border-t border-slate-100"
@@ -2018,7 +2035,8 @@ export default function Dashboard() {
                                       </div>
                                     )}
                                   </div>
-                                </td>
+                                </div>
+                              </td>
                               </tr>
                             ))}
                           </tbody>

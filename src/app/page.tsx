@@ -732,7 +732,7 @@ export default function Dashboard() {
     const doc = (item as any).document;
     if (!doc) {
       // Fallback for legacy files: use old verifiers logic
-      if (item.creator === user.name) return false;
+      if (item.creator === user.name && user.role !== 'ADMIN') return false;
       const userNormalized = user.name?.trim().toLowerCase();
       const alreadySigned = 
         item.verifier1?.trim().toLowerCase() === userNormalized || 

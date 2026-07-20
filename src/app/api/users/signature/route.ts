@@ -18,17 +18,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Sesión inválida o expirada.' }, { status: 401 });
     }
 
-    // 2. Get User ID (either target user for admin, or self)
-    const formData = await request.formData();
-    const targetUserId = formData.get('userId') as string | null;
-    const file = formData.get('file') as File | null;
+    // 2. Determine Request Format and Get User ID (either target user for admin, or self)
+    const contentType = request.headers.get('content-type') || '';
+    let finalUserId = decoded.userId;
+    let buffer: Buffer;
+    
+    if (contentType.includes('application/json')) {
+      const body = await request.json();
+      const targetUserId = body.userId;
+      const signatureBase64 = body.signatureBase64;
+      
+      if (!signatureBase64) {
+        return NextResponse.json({ error: 'No se ha proporcionado la firma en formato base64' }, { status: 400 });
+      }
+      
+      finalUserId = (decoded.role === 'ADMIN' && targetUserId) ? targetUserId : decoded.userId;
+      
+      const base64Data = signatureBase64.split(';base64,')[1] || signatureBase64;
+      buffer = Buffer.from(base64Data, 'base64');
+    } else {
+      const formData = await request.formData();
+      const targetUserId = formData.get('userId') as string | null;
+      const file = formData.get('file') as File | null;
 
-    if (!file) {
-      return NextResponse.json({ error: 'No se ha subido ningún archivo' }, { status: 400 });
+      if (!file) {
+        return NextResponse.json({ error: 'No se ha subido ningún archivo' }, { status: 400 });
+      }
+
+      finalUserId = (decoded.role === 'ADMIN' && targetUserId) ? targetUserId : decoded.userId;
+      
+      const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+      if (fileExtension !== 'png') {
+        return NextResponse.json({ error: 'Solo se permiten firmas en formato PNG con fondo transparente.' }, { status: 400 });
+      }
+      
+      const bytes = await file.arrayBuffer();
+      buffer = Buffer.from(bytes);
     }
-
-    // Admins can upload signatures for any user, other roles only for themselves
-    const finalUserId = (decoded.role === 'ADMIN' && targetUserId) ? targetUserId : decoded.userId;
 
     const user = await db.user.findUnique({
       where: { id: finalUserId }
@@ -38,16 +64,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
     }
 
-    // 3. Process File Upload
-    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-    if (fileExtension !== 'png') {
-      return NextResponse.json({ error: 'Solo se permiten firmas en formato PNG con fondo transparente.' }, { status: 400 });
-    }
-
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    
-    // Clean and generate filename
+    // 3. Process File Upload and Save
     const diskFileName = `sig-${finalUserId}-${Date.now()}.png`;
     let signaturePath = '';
 
@@ -57,7 +74,7 @@ export async function POST(request: NextRequest) {
         .storage
         .from('files')
         .upload(`signatures/${diskFileName}`, buffer, {
-          contentType: file.type || 'image/png',
+          contentType: 'image/png',
           upsert: true
         });
 

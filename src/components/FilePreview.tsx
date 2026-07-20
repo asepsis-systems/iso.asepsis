@@ -17,7 +17,8 @@ import {
   Highlighter,
   Type,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import clsx from 'clsx';
@@ -550,6 +551,94 @@ function PdfPage({
   );
 }
 
+export const generateInitialsSignature = (name: string): string => {
+  if (typeof window === 'undefined' || !name) return '';
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = 300;
+  canvas.height = 150;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+  
+  const parts = name.trim().split(/\s+/);
+  let initials = '';
+  if (parts.length > 0) {
+    initials += parts[0][0].toUpperCase();
+    if (parts.length > 1) {
+      initials += parts[parts.length - 1][0].toUpperCase();
+    }
+  } else {
+    initials = name.substring(0, 2).toUpperCase();
+  }
+  
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Dashed blue border
+  ctx.strokeStyle = '#2563eb';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 6]);
+  
+  const rx = 10, ry = 10, rw = 280, rh = 130, r = 10;
+  ctx.beginPath();
+  ctx.moveTo(rx + r, ry);
+  ctx.lineTo(rx + rw - r, ry);
+  ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + r);
+  ctx.lineTo(rx + rw, ry + rh - r);
+  ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - r, ry + rh);
+  ctx.lineTo(rx + r, ry + rh);
+  ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - r);
+  ctx.lineTo(rx, ry + r);
+  ctx.quadraticCurveTo(rx, ry, rx + r, ry);
+  ctx.closePath();
+  ctx.stroke();
+  
+  // Draw an elegant decorative wavy signature line
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#3b82f6';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(35, 85);
+  ctx.quadraticCurveTo(100, 95, 160, 80);
+  ctx.stroke();
+
+  // Seal circle on the right
+  ctx.fillStyle = '#eff6ff';
+  ctx.strokeStyle = '#3b82f6';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(225, 55, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Checkmark in seal
+  ctx.strokeStyle = '#1d4ed8';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(215, 55);
+  ctx.lineTo(221, 60);
+  ctx.lineTo(235, 48);
+  ctx.stroke();
+  
+  // Cursive initials
+  ctx.fillStyle = '#1e3a8a';
+  ctx.font = 'italic bold 52px "Brush Script MT", "Dancing Script", "Caveat", Georgia, serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initials, 45, 55);
+  
+  // Full Name
+  ctx.fillStyle = '#475569';
+  ctx.font = 'bold 11px Arial, Helvetica, sans-serif';
+  ctx.fillText(name.toUpperCase(), 35, 108);
+  
+  // Tagline
+  ctx.fillStyle = '#64748b';
+  ctx.font = '8px Arial, Helvetica, sans-serif';
+  ctx.fillText('FIRMA DE INICIALES AUTOGENERADA', 35, 122);
+  
+  return canvas.toDataURL('image/png');
+};
+
 export default function FilePreview({
   isOpen,
   onClose,
@@ -604,6 +693,23 @@ export default function FilePreview({
   const [posY, setPosY] = useState(85);
   const [activeTool, setActiveTool] = useState<'select' | 'comment' | 'draw' | 'highlight' | 'text' | 'signature'>('signature');
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [selectedSignatureUrl, setSelectedSignatureUrl] = useState<string | null>(null);
+  const [initialsSigUrl, setInitialsSigUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen && currentUserName) {
+      const generated = generateInitialsSignature(currentUserName);
+      setInitialsSigUrl(generated);
+      if (currentUserSignature) {
+        setSelectedSignatureUrl(currentUserSignature);
+      } else {
+        setSelectedSignatureUrl(generated);
+      }
+    } else {
+      setSelectedSignatureUrl(null);
+      setInitialsSigUrl('');
+    }
+  }, [isOpen, currentUserSignature, currentUserName]);
 
   useEffect(() => {
     if (isOpen) {
@@ -1025,8 +1131,6 @@ export default function FilePreview({
                   </p>
 
                   <div className="space-y-4">
-                    {/* List of signatures, matching the user's screenshot layout */}
-                    {/* List of signatures, matching the user's screenshot layout */}
                     {activeTool === 'signature' && (
                       <div className="space-y-3">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mis Firmas Guardadas</span>
@@ -1037,62 +1141,72 @@ export default function FilePreview({
                               La firma de documentos está deshabilitada en el modo vista.
                             </p>
                           </div>
-                        ) : !currentUserSignature ? (
-                          <div className="border border-amber-200 bg-amber-50/50 rounded-xl p-3 text-center">
-                            <p className="text-[10px] text-amber-800 font-semibold leading-relaxed">
-                              No has configurado tu firma digital en tu perfil. Puedes usar las anotaciones y textos, pero para firmar físicamente debes subir tu firma haciendo clic en tus iniciales arriba a la derecha.
-                            </p>
-                          </div>
                         ) : (
-                          <>
-                            {/* Signature Box 1 */}
-                            <div 
-                              draggable="true"
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData("text/plain", "signature");
-                              }}
-                              className="border-2 border-blue-500 rounded-xl p-3 bg-white relative group transition-all shadow-sm cursor-grab active:cursor-grabbing hover:border-blue-600 hover:shadow-md"
-                            >
-                              <div className="h-16 flex items-center justify-center overflow-hidden pointer-events-none">
-                                <img src={currentUserSignature} alt="Firma Principal" className="max-h-full max-w-full object-contain mix-blend-multiply" />
-                              </div>
-                              <button 
-                                type="button"
-                                className="absolute top-2 right-2 p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                                title="Eliminar firma"
+                          <div className="space-y-3.5">
+                            {/* Option 1: Digital Uploaded Signature */}
+                            {currentUserSignature ? (
+                              <div 
+                                draggable="true"
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData("text/plain", "signature");
+                                  setSelectedSignatureUrl(currentUserSignature);
+                                }}
+                                onClick={() => setSelectedSignatureUrl(currentUserSignature)}
+                                className={clsx(
+                                  "border-2 rounded-xl p-3 bg-white relative group transition-all shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md",
+                                  selectedSignatureUrl === currentUserSignature ? "border-blue-500 shadow-md bg-blue-50/10" : "border-slate-200/80 hover:border-slate-300"
+                                )}
                               >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                              <div className="border-t border-slate-100 mt-2.5 pt-2 text-center flex items-center justify-between pointer-events-none">
-                                <span className="text-[10px] font-bold text-slate-500 block truncate max-w-[130px] text-left">{currentUserName}</span>
-                                <span className="text-[8px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Principal</span>
+                                <div className="h-16 flex items-center justify-center overflow-hidden pointer-events-none">
+                                  <img src={currentUserSignature} alt="Firma Principal" className="max-h-full max-w-full object-contain mix-blend-multiply" />
+                                </div>
+                                <div className="border-t border-slate-100 mt-2.5 pt-2 text-center flex items-center justify-between pointer-events-none">
+                                  <span className="text-[10px] font-bold text-slate-500 block truncate max-w-[130px] text-left">{currentUserName}</span>
+                                  <span className="text-[8px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Principal (Subida)</span>
+                                </div>
+                                {selectedSignatureUrl === currentUserSignature && (
+                                  <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-0.5 shadow">
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  </div>
+                                )}
                               </div>
-                            </div>
+                            ) : (
+                              <div className="border border-amber-200 bg-amber-50/30 rounded-xl p-3">
+                                <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
+                                  No has configurado tu firma digital en tu perfil. Puedes usar tu firma de iniciales autogenerada abajo, o subir una imagen en PNG haciendo clic en tu perfil.
+                                </p>
+                              </div>
+                            )}
 
-                            {/* Signature Box 2 */}
-                            <div 
-                              draggable="true"
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData("text/plain", "signature");
-                              }}
-                              className="border border-slate-200/80 hover:border-blue-400 rounded-xl p-3 bg-white relative group transition-all shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md"
-                            >
-                              <div className="h-16 flex items-center justify-center overflow-hidden opacity-75 pointer-events-none">
-                                <img src={currentUserSignature} alt="Firma Alternativa" className="max-h-full max-w-full object-contain mix-blend-multiply scale-90" />
-                              </div>
-                              <button 
-                                type="button"
-                                className="absolute top-2 right-2 p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                                title="Eliminar firma"
+                            {/* Option 2: Autogenerated Initials Signature */}
+                            {initialsSigUrl && (
+                              <div 
+                                draggable="true"
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData("text/plain", "signature");
+                                  setSelectedSignatureUrl(initialsSigUrl);
+                                }}
+                                onClick={() => setSelectedSignatureUrl(initialsSigUrl)}
+                                className={clsx(
+                                  "border-2 rounded-xl p-3 bg-white relative group transition-all shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md",
+                                  selectedSignatureUrl === initialsSigUrl ? "border-blue-500 shadow-md bg-blue-50/10" : "border-slate-200/80 hover:border-slate-300"
+                                )}
                               >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                              <div className="border-t border-slate-100 mt-2.5 pt-2 text-center flex items-center justify-between pointer-events-none">
-                                <span className="text-[10px] font-bold text-slate-400 block truncate max-w-[130px] text-left">Iniciales / Media</span>
-                                <span className="text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase">Alternativa</span>
+                                <div className="h-16 flex items-center justify-center overflow-hidden pointer-events-none bg-slate-50/50 rounded-lg">
+                                  <img src={initialsSigUrl} alt="Firma Autogenerada" className="max-h-full max-w-full object-contain mix-blend-multiply" />
+                                </div>
+                                <div className="border-t border-slate-100 mt-2.5 pt-2 text-center flex items-center justify-between pointer-events-none">
+                                  <span className="text-[10px] font-bold text-slate-500 block truncate max-w-[130px] text-left">Firma de Iniciales</span>
+                                  <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase">Iniciales ({currentUserName?.trim().split(/\s+/)[0][0] || ''}{(currentUserName?.trim().split(/\s+/).length || 0) > 1 ? currentUserName?.trim().split(/\s+/).slice(-1)[0][0] : ''})</span>
+                                </div>
+                                {selectedSignatureUrl === initialsSigUrl && (
+                                  <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-0.5 shadow">
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          </>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
@@ -1202,11 +1316,28 @@ export default function FilePreview({
                   {canSign && (
                     <button 
                       type="button"
-                      onClick={() => {
-                        if (activeTool === 'signature' && !currentUserSignature) {
-                          alert("No puedes colocar una firma física porque no has configurado tu firma en tu perfil. Por favor, configúrala primero.");
+                      onClick={async () => {
+                        if (activeTool === 'signature' && !selectedSignatureUrl) {
+                          alert("No se ha seleccionado ninguna firma.");
                           return;
                         }
+
+                        // Auto-save the generated initials signature in the profile in background
+                        if (activeTool === 'signature' && !currentUserSignature && selectedSignatureUrl) {
+                          try {
+                            const saveRes = await fetch('/api/users/signature', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ signatureBase64: selectedSignatureUrl })
+                            });
+                            if (!saveRes.ok) {
+                              console.error('Failed to auto-save initials signature to profile');
+                            }
+                          } catch (e) {
+                            console.error('Error auto-saving signature:', e);
+                          }
+                        }
+
                         setIsPlacingSignature(false);
                         if (onVerify) {
                           if (isPDF) {
@@ -1280,7 +1411,7 @@ export default function FilePreview({
                           setPosX(x);
                           setPosY(y);
                         }}
-                        signatureUrl={currentUserSignature}
+                        signatureUrl={selectedSignatureUrl}
                         canSign={canSign}
                         zoom={zoom}
                         sigScale={sigScale}

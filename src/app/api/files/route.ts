@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth-helpers';
 import fs from 'fs';
 import path from 'path';
-import { canUserAccessNode, getNodeName, logAuthorization, findAreaForNode } from '@/lib/permission';
+import { canUserAccessNode, getNodeName, logAuthorization, findAreaForNode, isNodeUnderGeneral } from '@/lib/permission';
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -525,8 +526,10 @@ export async function PUT(request: NextRequest) {
       } else {
         const nodeArea = await findAreaForNode(id);
         const isAreaCreator = nodeArea && currentUser.role === 'CREATOR' && currentUser.areaId === nodeArea.id;
+        const isUnderGeneral = await isNodeUnderGeneral(id);
+        const isGeneralCreator = isUnderGeneral && currentUser.role === 'CREATOR';
 
-        if (currentUser.role !== 'ADMIN' && existingNode?.creator !== currentUser.name && !isAreaCreator) {
+        if (currentUser.role !== 'ADMIN' && existingNode?.creator !== currentUser.name && !isAreaCreator && !isGeneralCreator) {
           return NextResponse.json({ error: 'No tienes permisos para mover este elemento a la papelera.' }, { status: 403 });
         }
       }
@@ -629,8 +632,10 @@ export async function DELETE(request: NextRequest) {
     } else {
       const nodeArea = await findAreaForNode(id);
       const isAreaCreator = nodeArea && currentUser.role === 'CREATOR' && currentUser.areaId === nodeArea.id;
+      const isUnderGeneral = await isNodeUnderGeneral(id);
+      const isGeneralCreator = isUnderGeneral && currentUser.role === 'CREATOR';
 
-      if (currentUser.role !== 'ADMIN' && node.creator !== currentUser.name && !isAreaCreator) {
+      if (currentUser.role !== 'ADMIN' && node.creator !== currentUser.name && !isAreaCreator && !isGeneralCreator) {
         return NextResponse.json({ error: 'No tienes permisos para eliminar este elemento.' }, { status: 403 });
       }
     }

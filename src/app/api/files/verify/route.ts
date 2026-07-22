@@ -320,6 +320,10 @@ async function appendValidationPage(
 async function getSignatureBuffer(signaturePath: string | null): Promise<Buffer | null> {
   if (!signaturePath) return null;
   try {
+    if (signaturePath.startsWith('data:')) {
+      const base64Data = signaturePath.split(',')[1];
+      return Buffer.from(base64Data, 'base64');
+    }
     if (signaturePath.startsWith('http://') || signaturePath.startsWith('https://')) {
       const res = await fetch(signaturePath);
       if (res.ok) {
@@ -678,8 +682,8 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Legacy Orderless Flow Validation
-      // Rule 1: The creator cannot verify their own file
-      if (normalizedCreator === normalizedUser) {
+      // Rule 1: The creator cannot verify their own file (unless they are ADMIN)
+      if (normalizedCreator === normalizedUser && user.role !== 'ADMIN') {
         return NextResponse.json({ 
           error: 'Restricción de control: El creador del archivo no puede firmar como verificador.' 
         }, { status: 403 });

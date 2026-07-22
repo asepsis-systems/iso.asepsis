@@ -1636,7 +1636,7 @@ export default function Dashboard() {
                               >
                                 Open
                               </button>
-                              {item.type === 'FILE' && !item.isTrashed && (
+                              {item.type === 'FILE' && !item.isTrashed && canUserSign(item) && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1953,7 +1953,7 @@ export default function Dashboard() {
                                         >
                                           Abrir
                                         </button>
-                                        {item.type === 'FILE' && !item.isTrashed && (
+                                        {item.type === 'FILE' && !item.isTrashed && canUserSign(item) && (
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
@@ -2108,7 +2108,7 @@ export default function Dashboard() {
                                   >
                                     Abrir
                                   </button>
-                                  {item.type === 'FILE' && !item.isTrashed && (
+                                  {item.type === 'FILE' && !item.isTrashed && canUserSign(item) && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();

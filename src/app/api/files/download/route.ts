@@ -669,7 +669,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify if there is an approved Document associated with this file node
-    const doc = await db.document.findFirst({
+    let doc = await db.document.findFirst({
       where: { nodeId: node.id },
       include: {
         area: {
@@ -685,6 +685,65 @@ export async function GET(request: NextRequest) {
         }
       }
     });
+
+    // If no multi-verifier Document flow exists, but the document was signed via Simple/Express sign (indicated by verifiers list in Node)
+    // we build a beautiful virtual Document object to dynamically generate its Certificate of signatures
+    if (!doc && (node.verifier1 || node.verifier2 || node.verifier3)) {
+      const mockSignatures: any[] = [];
+      
+      const buildMockSignature = async (verifierName: string, step: number) => {
+        const u = await db.user.findFirst({
+          where: { name: verifierName }
+        });
+        
+        return {
+          id: `virtual-sig-${step}-${node.id}`,
+          status: 'APROBADO',
+          signedAt: node.updatedAt || node.createdAt, // fallback to node date
+          coordX: null,
+          coordY: null,
+          ipAddress: clientIp, // fallback
+          pageNumber: 1,
+          user: u ? u : {
+            id: `virtual-user-${step}`,
+            name: verifierName,
+            username: verifierName.toLowerCase().replace(/\s+/g, ''),
+            email: `${verifierName.toLowerCase().replace(/\s+/g, '')}@asepsis.pe`,
+            cargo: step === 1 ? 'Gerente General' : 'Verificador de Control',
+            signature: null
+          }
+        };
+      };
+
+      if (node.verifier1) mockSignatures.push(await buildMockSignature(node.verifier1, 1));
+      if (node.verifier2) mockSignatures.push(await buildMockSignature(node.verifier2, 2));
+      if (node.verifier3) mockSignatures.push(await buildMockSignature(node.verifier3, 3));
+
+      doc = {
+        id: `virtual-doc-${node.id}`,
+        areaId: 'general',
+        nodeId: node.id,
+        status: 'APROBADO',
+        creatorId: 'virtual-creator',
+        createdAt: node.createdAt,
+        updatedAt: node.updatedAt,
+        area: {
+          id: 'general',
+          name: 'Gestión Documental',
+          color: 'blue',
+          folderNodeId: null,
+          verifiers: []
+        } as any,
+        creator: {
+          id: 'virtual-creator',
+          name: node.creator || 'Asepsis User',
+          username: 'creator',
+          email: 'admin@asepsis.pe',
+          role: 'ADMIN'
+        } as any,
+        signatures: mockSignatures
+      } as any;
+    }
 
     const isPdf = node.mimeType === 'application/pdf' || node.name.toLowerCase().endsWith('.pdf');
 

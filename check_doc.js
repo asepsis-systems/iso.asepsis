@@ -2,23 +2,26 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('--- FETCHING NODES ---');
-  const nodes = await prisma.node.findMany({
-    where: { name: { contains: 'Pol' } },
+  console.log('--- DB SUMMARY ---');
+  const nodeCount = await prisma.node.count();
+  const docCount = await prisma.document.count();
+  const sigCount = await prisma.signature.count();
+  console.log(`Nodes: ${nodeCount}, Documents: ${docCount}, Signatures: ${sigCount}`);
+
+  console.log('\n--- FIRST 5 DOCUMENTS ---');
+  const docs = await prisma.document.findMany({
+    take: 5,
+    include: {
+      signatures: true
+    }
+  });
+  console.log(JSON.stringify(docs, null, 2));
+
+  console.log('\n--- FIRST 5 SIGNATURES ---');
+  const sigs = await prisma.signature.findMany({
     take: 5
   });
-  console.log('Nodes found:', JSON.stringify(nodes, null, 2));
-
-  for (const node of nodes) {
-    console.log(`\nChecking Document for node ID: ${node.id}`);
-    const doc = await prisma.document.findFirst({
-      where: { nodeId: node.id },
-      include: {
-        signatures: true
-      }
-    });
-    console.log('Document found:', JSON.stringify(doc, null, 2));
-  }
+  console.log(JSON.stringify(sigs, null, 2));
 }
 
 main()

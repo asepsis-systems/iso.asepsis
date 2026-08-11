@@ -2,22 +2,20 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('--- AUDIT ACTIONS IN SYSTEM ---');
-  const actions = await prisma.audit.findMany({
-    select: {
-      action: true
-    },
-    distinct: ['action']
-  });
-  console.log(JSON.stringify(actions, null, 2));
-
-  console.log('\n--- FIRST 20 AUDITS ---');
+  console.log('--- AUDITS FOR POLITICA ---');
   const audits = await prisma.audit.findMany({
-    take: 20,
-    orderBy: { createdAt: 'desc' }
+    where: {
+      OR: [
+        { detail: { contains: 'Politica SIG' } },
+        { detail: { contains: 'Politica' } }
+      ]
+    },
+    orderBy: { createdAt: 'asc' }
   });
-  audits.forEach(a => {
-    console.log(`User: ${a.username}, Action: ${a.action}, Detail: ${a.detail.substring(0, 100)}...`);
+
+  audits.forEach((a, idx) => {
+    console.log(`${idx + 1}: Date: ${a.createdAt.toISOString()}, User: ${a.username}, Action: ${a.action}`);
+    console.log(`   Detail: ${a.detail}`);
   });
 }
 

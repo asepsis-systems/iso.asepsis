@@ -26,6 +26,10 @@ function getAreaAbbreviation(name: string): string {
 async function getSignatureBuffer(signaturePath: string | null): Promise<Buffer | null> {
   if (!signaturePath) return null;
   try {
+    if (signaturePath.startsWith('data:')) {
+      const base64Data = signaturePath.split(',')[1];
+      return Buffer.from(base64Data, 'base64');
+    }
     if (signaturePath.startsWith('http://') || signaturePath.startsWith('https://')) {
       const res = await fetch(signaturePath);
       if (res.ok) {
@@ -221,10 +225,10 @@ async function appendCertificatePages(
   currentY -= 12;
 
   // Sort signatures by order
-  const verifiers = doc.area.verifiers || [];
+  const verifiers = doc?.area?.verifiers || [];
   const verifierOrderMap = new Map();
   verifiers.forEach((v: any) => { verifierOrderMap.set(v.userId, v.signOrder); });
-  const sortedSignatures = doc.signatures.sort((a: any, b: any) => {
+  const sortedSignatures = [...(doc?.signatures || [])].sort((a: any, b: any) => {
     const oA = verifierOrderMap.get(a.userId) || 99;
     const oB = verifierOrderMap.get(b.userId) || 99;
     return oA - oB;
@@ -253,11 +257,11 @@ async function appendCertificatePages(
       currentY -= 12;
     }
 
-    const user = sig.user;
+    const user = sig.user || { name: 'Usuario', username: 'usuario', email: 'usuario@asepsis.pe', cargo: 'Verificador', signature: null };
     let cargo = user.cargo ? user.cargo : 'Verificador';
     if (!user.cargo) {
-      if (user.role === 'ADMIN') cargo = 'Gerente General';
-      else if (user.role === 'VERIFIER') cargo = 'Verificador de Control';
+      if ((user as any).role === 'ADMIN') cargo = 'Gerente General';
+      else if ((user as any).role === 'VERIFIER') cargo = 'Verificador de Control';
     }
 
     const email = user.email || `${user.username}@asepsis.pe`;
@@ -271,22 +275,33 @@ async function appendCertificatePages(
     const viewDateStr = formatDateTime(viewDate);
     const signedDateStr = sig.signedAt ? formatDateTime(sig.signedAt) : 'Pendiente';
 
-    // Retrieve IP
+    // Retrieve IP and signatureType from audit trail
     let ip = sig.ipAddress;
-    if (!ip) {
-      const sigAudit = audits.find((a: any) => {
-        try {
-          const detail = JSON.parse(a.detail);
-          return a.username === user.username && detail.action === 'FIRMAR_DOCUMENTO';
-        } catch {
-          return false;
-        }
-      });
-      if (sigAudit) {
-        try {
-          ip = JSON.parse(sigAudit.detail).ip || '127.0.0.1';
-        } catch {}
+    let signatureTypeLabel = 'Firma Digital';
+    
+    const sigAudit = audits.find((a: any) => {
+      try {
+        const detail = JSON.parse(a.detail);
+        return a.username === user.username && detail.action === 'FIRMAR_DOCUMENTO';
+      } catch {
+        return false;
       }
+    });
+
+    if (sigAudit) {
+      try {
+        const detail = JSON.parse(sigAudit.detail);
+        if (!ip) {
+          ip = detail.ip || '127.0.0.1';
+        }
+        if (detail.signatureType === 'initials') {
+          signatureTypeLabel = 'Iniciales';
+        } else if (detail.signatureType === 'visto_bueno') {
+          signatureTypeLabel = 'Aprobación con Sello';
+        } else if (detail.signatureType === 'no_stamp') {
+          signatureTypeLabel = 'Aprobación sin Sello';
+        }
+      } catch {}
     }
     if (!ip) ip = '127.0.0.1';
 
@@ -298,10 +313,10 @@ async function appendCertificatePages(
     currentPage.drawText("Autenticación de cuenta (ninguna)", { x: margin + 10, y: currentY - 58, size: 6.5, font: fontHelvetica, color: rgb(0.5, 0.5, 0.5) });
 
     // Column 2: Signature
-    currentPage.drawText("Firma digital", { x: margin + 210, y: currentY - 14, size: 6.5, font: fontHelveticaBold, color: rgb(0.1, 0.5, 0.25) });
+    currentPage.drawText(signatureTypeLabel, { x: margin + 210, y: currentY - 14, size: 6.5, font: fontHelveticaBold, color: rgb(0.1, 0.5, 0.25) });
     
-    // Draw signature image
-    if (user.signature) {
+    // Draw signature image (only if they stamped it)
+    if (user.signature && signatureTypeLabel !== 'Aprobación sin Sello') {
       try {
         const sigBuffer = await getSignatureBuffer(user.signature);
         if (sigBuffer) {
@@ -327,7 +342,10 @@ async function appendCertificatePages(
 
     const shortSigId = sig.id ? sig.id.split('-')[0].toUpperCase() : 'SIG_VERIFIED';
     currentPage.drawText(`ID Firma: ${shortSigId}`, { x: margin + 210, y: currentY - 58, size: 5.5, font: fontHelvetica, color: rgb(0.5, 0.5, 0.5) });
-    currentPage.drawText("Adopción de firma: Imagen cargada", { x: margin + 210, y: currentY - 66, size: 5.5, font: fontHelvetica, color: rgb(0.5, 0.5, 0.5) });
+    const adoptionText = signatureTypeLabel === 'Aprobación sin Sello'
+      ? "Adopción de firma: Registro electrónico sin sello visual"
+      : "Adopción de firma: Imagen cargada";
+    currentPage.drawText(adoptionText, { x: margin + 210, y: currentY - 66, size: 5.5, font: fontHelvetica, color: rgb(0.5, 0.5, 0.5) });
     currentPage.drawText(`Dirección IP: ${ip}`, { x: margin + 210, y: currentY - 74, size: 5.5, font: fontHelvetica, color: rgb(0.4, 0.4, 0.4) });
     
     const locationStr = sig.pageNumber 
@@ -390,7 +408,7 @@ async function appendCertificatePages(
   });
 
   // 2. Certificate delivered (first view)
-  const sortedAudits = audits.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const sortedAudits = [...(audits || [])].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const uploadAudit = sortedAudits.find(a => a.action === 'SUBIR_DOCUMENTO');
   if (uploadAudit) {
     timelineEvents.push({

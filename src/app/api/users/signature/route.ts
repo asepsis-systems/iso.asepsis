@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyToken } from '@/lib/auth-helpers';
-import { supabase } from '@/lib/supabase';
-import fs from 'fs';
-import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,40 +61,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
     }
 
-    // 3. Process File Upload and Save
-    const diskFileName = `sig-${finalUserId}-${Date.now()}.png`;
-    let signaturePath = '';
-
-    if (supabase) {
-      // Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase
-        .storage
-        .from('files')
-        .upload(`signatures/${diskFileName}`, buffer, {
-          contentType: 'image/png',
-          upsert: true
-        });
-
-      if (uploadError) {
-        throw new Error('Supabase Storage Error: ' + uploadError.message);
-      }
-      
-      // Get public URL
-      const { data } = supabase.storage.from('files').getPublicUrl(`signatures/${diskFileName}`);
-      signaturePath = data.publicUrl;
-    } else {
-      // Local Storage fallback: Save in the public folder so Next.js serves it statically
-      const uploadDir = path.join(process.cwd(), 'public', 'signatures');
-      
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-      
-      const filePath = path.join(uploadDir, diskFileName);
-      fs.writeFileSync(filePath, buffer);
-      
-      signaturePath = `/signatures/${diskFileName}`;
-    }
+    // 3. Process and Save Signature as Base64 Data URI
+    // By saving directly as Base64 Data URI in the database, we guarantee 100% persistence
+    // across all environments (Vercel, local, VPS) with zero filesystem or network dependency.
+    const signaturePath = `data:image/png;base64,${buffer.toString('base64')}`;
 
     // 4. Update User in DB
     const updatedUser = await db.user.update({

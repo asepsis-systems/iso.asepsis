@@ -51,7 +51,7 @@ interface FilePreviewProps {
   verifier2Signature?: string | null;
   verifier3Signature?: string | null;
   canSign?: boolean;
-  onVerify?: (placement?: { page: string; pageNumber?: number; x: number; y: number }, annotations?: Annotation[]) => void;
+  onVerify?: (placement?: { page: string; pageNumber?: number; x: number; y: number; signatureType?: string }, annotations?: Annotation[]) => void;
   onRemoveVerify?: () => void;
   onReject?: () => void;
   isApproved?: boolean;
@@ -724,10 +724,10 @@ export const generateVistoBuenoSeal = (initials: string): string => {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   
-  // "VISTO BUENO - SIG"
+  // "APROBACIÓN CON SELLO"
   ctx.fillStyle = '#15803d'; // Green 700
   ctx.font = 'bold 13px Arial, Helvetica, sans-serif';
-  ctx.fillText('VISTO BUENO - SIG', 90, 32);
+  ctx.fillText('APROBACIÓN CON SELLO', 90, 32);
 
   // Initials
   ctx.fillStyle = '#166534'; // Green 800
@@ -1318,7 +1318,7 @@ export default function FilePreview({
                                 : "text-slate-500 hover:text-slate-800"
                             )}
                           >
-                            Firma
+                            Firma Digital
                           </button>
                           <button
                             type="button"
@@ -1342,7 +1342,7 @@ export default function FilePreview({
                                 : "text-slate-500 hover:text-slate-800"
                             )}
                           >
-                            Visto Bueno
+                            Aprobación con Sello
                           </button>
                           <button
                             type="button"
@@ -1506,10 +1506,10 @@ export default function FilePreview({
                               </div>
                             )}
 
-                            {/* TAB 3: VISTO BUENO / VERIFICACIÓN */}
+                            {/* TAB 3: APROBACIÓN CON SELLO */}
                             {sigTab === 'visto_bueno' && (
                               <div className="space-y-3">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Sello de Visto Bueno / SIG</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Sello de Aprobación / SIG</span>
                                 <div className="space-y-1">
                                   <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Escribe tus Iniciales</label>
                                   <input
@@ -1536,11 +1536,11 @@ export default function FilePreview({
                                     )}
                                   >
                                     <div className="h-16 flex items-center justify-center overflow-hidden pointer-events-none bg-slate-50/50 rounded-lg">
-                                      <img src={vistoBuenoUrl} alt="Sello Visto Bueno" className="max-h-full max-w-full object-contain mix-blend-multiply" />
+                                      <img src={vistoBuenoUrl} alt="Sello Aprobación" className="max-h-full max-w-full object-contain mix-blend-multiply" />
                                     </div>
                                     <div className="border-t border-slate-100 mt-2.5 pt-2 text-center flex items-center justify-between pointer-events-none">
-                                      <span className="text-[10px] font-bold text-slate-500 block truncate text-left">Visto Bueno - SIG</span>
-                                      <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase">Visto Bueno SIG</span>
+                                      <span className="text-[10px] font-bold text-slate-500 block truncate text-left">Aprobación con Sello</span>
+                                      <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase">Sello de Aprobación</span>
                                     </div>
                                     {selectedSignatureUrl === vistoBuenoUrl && (
                                       <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-0.5 shadow">
@@ -1710,7 +1710,8 @@ export default function FilePreview({
                                     page: placementPage,
                                     pageNumber: placementPage === 'number' ? placementPageNumber : undefined,
                                     x: posX,
-                                    y: 100 - posY
+                                    y: 100 - posY,
+                                    signatureType: sigTab
                                   } 
                                 : undefined,
                               annotations
@@ -1729,7 +1730,7 @@ export default function FilePreview({
                               ? "Confirmar Iniciales" 
                               : sigTab === 'no_stamp'
                                 ? "Verificar sin Firma"
-                                : "Registrar Visto Bueno") 
+                                : "Confirmar Sello") 
                         : "Confirmar Cambios"}
                     </button>
                   )}

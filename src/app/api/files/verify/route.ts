@@ -188,16 +188,16 @@ async function appendValidationPage(
     verifierOrderMap.set(v.userId, v.signOrder);
   });
   
-  const sortedSignatures = signatures.sort((a, b) => {
+  const sortedSignatures = [...(signatures || [])].sort((a, b) => {
     const orderA = verifierOrderMap.get(a.userId) || 99;
     const orderB = verifierOrderMap.get(b.userId) || 99;
     return orderA - orderB;
   });
   
-  const cardH = 90;
+  const cardH = 100;
   for (const sig of sortedSignatures) {
     const isCurrent = sig.userId === currentUser.id;
-    const sigUser = sig.user;
+    const sigUser = sig.user || { name: 'Usuario', username: 'usuario', email: 'usuario@asepsis.pe', cargo: 'Verificador', signature: null };
     
     page.drawRectangle({
       x: 30,
@@ -210,15 +210,31 @@ async function appendValidationPage(
     });
     
     let verifierIp = '127.0.0.1';
-    if (isCurrent) {
-      verifierIp = currentIp;
-    } else {
-      const audit = audits.find(a => a.username === sigUser.username);
-      if (audit) {
-        try {
-          verifierIp = JSON.parse(audit.detail).ip || '127.0.0.1';
-        } catch {}
+    let signatureTypeLabel = 'Firma Digital';
+    
+    const audit = audits.find(a => {
+      try {
+        const detail = JSON.parse(a.detail);
+        return a.username === sigUser.username && detail.action === 'FIRMAR_DOCUMENTO';
+      } catch {
+        return false;
       }
+    });
+
+    if (audit) {
+      try {
+        const detail = JSON.parse(audit.detail);
+        verifierIp = detail.ip || '127.0.0.1';
+        if (detail.signatureType === 'initials') {
+          signatureTypeLabel = 'Iniciales';
+        } else if (detail.signatureType === 'visto_bueno') {
+          signatureTypeLabel = 'Aprobación con Sello';
+        } else if (detail.signatureType === 'no_stamp') {
+          signatureTypeLabel = 'Aprobación sin Sello';
+        }
+      } catch {}
+    } else if (isCurrent) {
+      verifierIp = currentIp;
     }
     
     const signDateStr = isCurrent 
@@ -247,8 +263,11 @@ async function appendValidationPage(
     page.drawText('Dirección IP:', { x: 45, y: y - 61, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
     page.drawText(verifierIp, { x: 120, y: y - 61, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
     
-    page.drawText('Estado Firma:', { x: 45, y: y - 74, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
-    page.drawText('APROBADO Y FIRMADO', { x: 120, y: y - 74, size: 7.5, font: fontHelveticaBold, color: rgb(0.1, 0.5, 0.25) });
+    page.drawText('Método Firma:', { x: 45, y: y - 74, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText(signatureTypeLabel, { x: 120, y: y - 74, size: 7.5, font: fontHelvetica, color: rgb(0.1, 0.1, 0.1) });
+    
+    page.drawText('Estado Firma:', { x: 45, y: y - 87, size: 7.5, font: fontHelveticaBold, color: rgb(0.4, 0.4, 0.4) });
+    page.drawText('APROBADO Y FIRMADO', { x: 120, y: y - 87, size: 7.5, font: fontHelveticaBold, color: rgb(0.1, 0.5, 0.25) });
     
     if (sigUser.signature) {
       try {
@@ -835,31 +854,123 @@ export async function POST(request: NextRequest) {
 
           // 1. Draw signature if placement exists
           if (placement) {
-            let pageIdx = pages.length - 1; // Default last page
-            if (placement.page === 'first') {
-              pageIdx = 0;
-            } else if (placement.page === 'number' && placement.pageNumber) {
-              pageIdx = Math.min(Math.max(0, placement.pageNumber - 1), pages.length - 1);
+            // Find how many verifiers have already signed/approved this document
+            const existingApprovedSigs = doc ? doc.signatures.filter(s => s.status === 'APROBADO') : [];
+            const sigsCount = existingApprovedSigs.length;
+
+            let targetPage;
+            let width: number, height: number;
+
+            // To make signatures look exceptionally clean, professional, and uncrowded,
+            // we automatically gather all of them on a dedicated "Hoja de Firmas" appended at the end!
+            if (sigsCount === 0) {
+              // Append a new page to act as the "Hoja de Firmas"
+              targetPage = pdfDoc.addPage(PageSizes.A4);
+              const size = targetPage.getSize();
+              width = size.width;
+              height = size.height;
+
+              // Draw elegant decorations on the new page
+              const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+              const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+              // Draw title
+              targetPage.drawText("HOJA DE FIRMAS Y REGISTRO DE CONTROL DE CAMBIOS", {
+                x: 45,
+                y: height - 60,
+                size: 13,
+                font: fontBold,
+                color: rgb(0.08, 0.18, 0.36)
+              });
+
+              // Subtitle
+              targetPage.drawText("SISTEMA DE GESTIÓN INTEGRADO - ASEPSIS PERÚ", {
+                x: 45,
+                y: height - 76,
+                size: 8,
+                font: fontBold,
+                color: rgb(0.4, 0.4, 0.4)
+              });
+
+              // Separator line
+              targetPage.drawLine({
+                start: { x: 45, y: height - 85 },
+                end: { x: width - 45, y: height - 85 },
+                thickness: 1,
+                color: rgb(0.08, 0.18, 0.36)
+              });
+
+              // Document Metadata Box
+              const boxY = height - 165;
+              targetPage.drawRectangle({
+                x: 45,
+                y: boxY,
+                width: width - 90,
+                height: 60,
+                color: rgb(0.97, 0.98, 0.99),
+                borderColor: rgb(0.88, 0.9, 0.92),
+                borderWidth: 1
+              });
+
+              targetPage.drawText("DETALLES DEL DOCUMENTO ASOCIADO", {
+                x: 55,
+                y: boxY + 45,
+                size: 8,
+                font: fontBold,
+                color: rgb(0.08, 0.18, 0.36)
+              });
+
+              const docVersion = getVersionFromFilename(node.name);
+              const areaName = doc?.area?.name || 'Gestión Documental';
+              const areaAbbr = getAreaAbbreviation(areaName);
+              const docCode = `ASEPSIS-${areaAbbr}-${node.id.split('-')[0].toUpperCase()}`;
+              const docEmitDate = new Date(node.createdAt).toLocaleDateString('es-PE', { timeZone: 'America/Lima' });
+
+              targetPage.drawText(`Documento: ${node.name}`, { x: 55, y: boxY + 28, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
+              targetPage.drawText(`Código: ${docCode}`, { x: 55, y: boxY + 12, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
+              targetPage.drawText(`Versión: ${docVersion}`, { x: 300, y: boxY + 28, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
+              targetPage.drawText(`Fecha Emisión: ${docEmitDate}`, { x: 300, y: boxY + 12, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
+
+              // Guide text
+              targetPage.drawText("Las firmas estampadas a continuación certifican la revisión y aprobación formal del presente documento:", {
+                x: 45,
+                y: height - 200,
+                size: 8,
+                font: fontRegular,
+                color: rgb(0.3, 0.3, 0.3)
+              });
+            } else {
+              // Retrieve already appended signature page (the last page)
+              const updatedPages = pdfDoc.getPages();
+              targetPage = updatedPages[updatedPages.length - 1];
+              const size = targetPage.getSize();
+              width = size.width;
+              height = size.height;
             }
-            pageSigned = pageIdx + 1;
-            coordX = placement.x;
-            coordY = placement.y;
-            const targetPage = pages[pageIdx];
-            const { width, height } = targetPage.getSize();
 
             // Find active verifier's signature buffer
             let activeSigBuffer = null;
             let activeSigPath = null;
+            let isV1 = false;
+            let isV2 = false;
+            let isV3 = false;
+
             if (updateData.verifier1) {
               activeSigBuffer = verifier1SigBuffer;
               activeSigPath = verifier1Detail?.signature;
+              isV1 = true;
             } else if (updateData.verifier2) {
               activeSigBuffer = verifier2SigBuffer;
               activeSigPath = verifier2Detail?.signature;
+              isV2 = true;
             } else if (updateData.verifier3) {
               activeSigBuffer = verifier3SigBuffer;
               activeSigPath = verifier3Detail?.signature;
+              isV3 = true;
             }
+
+            // Populate coordinates dynamically for database logging and certificate tracking
+            pageSigned = pdfDoc.getPages().length;
 
             if (activeSigBuffer) {
               try {
@@ -873,15 +984,21 @@ export async function POST(request: NextRequest) {
 
                 if (img) {
                   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-                  const scale = placement.scale || 1.0;
-                  const boxW = 160 * scale;
-                  const boxH = 110 * scale;
+                  
+                  // Use standardized compact scale (0.9) to make them align beautifully on the sheet
+                  const scale = 0.9;
+                  const boxW = 144;
+                  const boxH = 99;
 
-                  const targetX = (placement.x / 100) * width;
-                  const targetY = (placement.y / 100) * height;
+                  // Determine symmetric x position based on the verifier slot
+                  let boxX = 45;
+                  if (isV2) boxX = 225;
+                  if (isV3) boxX = 405;
 
-                  const boxX = Math.max(0, Math.min(targetX - boxW / 2, width - boxW));
-                  const boxY = Math.max(0, Math.min(targetY - boxH / 2, height - boxH));
+                  const boxY = height - 340;
+
+                  coordX = (boxX + boxW / 2) / width * 100;
+                  coordY = (boxY + boxH / 2) / height * 100;
 
                   // Draw premium bounding box (transparent background to avoid covering document text)
                   targetPage.drawRectangle({
@@ -947,7 +1064,12 @@ export async function POST(request: NextRequest) {
                   });
 
                   // Draw certification stamp text
-                  const labelText = 'Firma Digital';
+                  let labelText = 'Firma Digital';
+                  if (placement && placement.signatureType === 'initials') {
+                    labelText = 'Iniciales';
+                  } else if (placement && placement.signatureType === 'visto_bueno') {
+                    labelText = 'Aprobación con Sello';
+                  }
                   const labelFontSize = 5.5 * scale;
                   const labelWidth = helveticaBold.widthOfTextAtSize(labelText, labelFontSize);
                   const labelX = boxX + (boxW - labelWidth) / 2;
@@ -1348,7 +1470,8 @@ export async function POST(request: NextRequest) {
             email: user.email || `${user.username}@asepsis.pe`,
             page: pageSigned,
             x: coordX,
-            y: coordY
+            y: coordY,
+            signatureType: placement?.signatureType || 'full'
           })
         }
       });

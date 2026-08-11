@@ -48,6 +48,7 @@ model User {
   signatures Signature[]
   area       Area?       @relation("UserArea", fields: [areaId], references: [id])
   verifiers  Verifier[]
+  incidents  Incident[]  @relation("UserIncidents")
 
   @@index([areaId])
 }
@@ -219,6 +220,11 @@ model Tarea {
   fechaCulminado       String?
   TareaArchivo         TareaArchivo[]
 
+  // Campos para Programación por Uso (Horómetro) - Solo para compresoras
+  horaInicio             Float?
+  frecuenciaHrs          Float?
+  proximoMantenimientoHrs Float?
+
   @@map("Tarea")
 }
 
@@ -315,3 +321,19 @@ model TareaArchivo {
 
   @@index([tareaId])
 }
+
+model Incident {
+  id          String   @id @default(uuid())
+  title       String
+  area        String
+  description String   @db.Text
+  imageUrl    String?  @db.Text
+  userId      String
+  status      String   @default("Pendiente")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation("UserIncidents", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+

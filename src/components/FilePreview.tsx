@@ -1318,31 +1318,7 @@ export default function FilePreview({
                                 : "text-slate-500 hover:text-slate-800"
                             )}
                           >
-                            Firma Digital
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSigTab('initials')}
-                            className={clsx(
-                              "flex-1 py-1.5 px-0.5 rounded-lg text-center transition-all",
-                              sigTab === 'initials' 
-                                ? "bg-white text-blue-700 shadow-sm border border-slate-100 font-bold" 
-                                : "text-slate-500 hover:text-slate-800"
-                            )}
-                          >
-                            Iniciales
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSigTab('visto_bueno')}
-                            className={clsx(
-                              "flex-1 py-1.5 px-0.5 rounded-lg text-center transition-all",
-                              sigTab === 'visto_bueno' 
-                                ? "bg-white text-blue-700 shadow-sm border border-slate-100 font-bold" 
-                                : "text-slate-500 hover:text-slate-800"
-                            )}
-                          >
-                            Aprobación con Sello
+                            Firma digital
                           </button>
                           <button
                             type="button"
@@ -1354,7 +1330,7 @@ export default function FilePreview({
                                 : "text-slate-500 hover:text-slate-800"
                             )}
                           >
-                            Sin Firma
+                            Verificar sin firma
                           </button>
                         </div>
 
@@ -1557,14 +1533,14 @@ export default function FilePreview({
                               <div className="space-y-3 p-3.5 bg-amber-500/[0.04] border border-amber-500/20 rounded-xl">
                                 <div className="flex items-center gap-1.5 text-amber-600">
                                   <AlertTriangle className="w-4 h-4" />
-                                  <span className="text-[10px] font-bold uppercase tracking-wider">Aprobación sin Sello</span>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider">Verificación sin Firma Visual</span>
                                 </div>
                                 <p className="text-[10.5px] text-slate-500 font-medium leading-relaxed">
                                   Esta opción registrará tu firma y verificación en el sistema de manera oficial, pero **no estampará ninguna marca o imagen visual** sobre el documento PDF.
                                 </p>
                                 <div className="p-2.5 bg-slate-50 border border-slate-200/50 rounded-lg text-[9px] text-slate-500 font-medium leading-relaxed">
-                                  <span className="font-bold text-slate-700 block mb-0.5">ℹ️ Nota del sistema:</span>
-                                  Ideal para verificaciones rápidas de revisión o cuando prefieres conservar el formato original del PDF limpio de marcas de agua.
+                                  <span className="font-bold text-slate-700 block mb-0.5">ℹ️ Sustento y Validez Legal:</span>
+                                  Tu aprobación queda registrada y auditada en el **Certificado de Firmas**. Al descargar el certificado, se detalla tu nombre, cargo, correo, fecha/hora exacta, dirección IP y el código Hash SHA-256 único del documento, garantizando plena validez legal y trazabilidad bajo la Ley de Firmas Electrónicas.
                                 </div>
                               </div>
                             )}

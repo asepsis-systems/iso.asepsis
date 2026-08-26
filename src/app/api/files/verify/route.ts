@@ -858,123 +858,25 @@ export async function POST(request: NextRequest) {
 
           // 1. Draw signature if placement exists
           if (placement) {
-            // Find how many verifiers have already signed/approved this document
-            const existingApprovedSigs = doc ? doc.signatures.filter(s => s.status === 'APROBADO') : [];
-            const sigsCount = existingApprovedSigs.length;
-
-            let targetPage;
-            let width: number, height: number;
-
-            // To make signatures look exceptionally clean, professional, and uncrowded,
-            // we automatically gather all of them on a dedicated "Hoja de Firmas" appended at the end!
-            if (sigsCount === 0) {
-              // Append a new page to act as the "Hoja de Firmas"
-              targetPage = pdfDoc.addPage(PageSizes.A4);
-              const size = targetPage.getSize();
-              width = size.width;
-              height = size.height;
-
-              // Draw elegant decorations on the new page
-              const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-              const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-              // Draw title
-              targetPage.drawText("HOJA DE FIRMAS Y REGISTRO DE CONTROL DE CAMBIOS", {
-                x: 45,
-                y: height - 60,
-                size: 13,
-                font: fontBold,
-                color: rgb(0.08, 0.18, 0.36)
-              });
-
-              // Subtitle
-              targetPage.drawText("SISTEMA DE GESTIÓN INTEGRADO - ASEPSIS PERÚ", {
-                x: 45,
-                y: height - 76,
-                size: 8,
-                font: fontBold,
-                color: rgb(0.4, 0.4, 0.4)
-              });
-
-              // Separator line
-              targetPage.drawLine({
-                start: { x: 45, y: height - 85 },
-                end: { x: width - 45, y: height - 85 },
-                thickness: 1,
-                color: rgb(0.08, 0.18, 0.36)
-              });
-
-              // Document Metadata Box
-              const boxY = height - 165;
-              targetPage.drawRectangle({
-                x: 45,
-                y: boxY,
-                width: width - 90,
-                height: 60,
-                color: rgb(0.97, 0.98, 0.99),
-                borderColor: rgb(0.88, 0.9, 0.92),
-                borderWidth: 1
-              });
-
-              targetPage.drawText("DETALLES DEL DOCUMENTO ASOCIADO", {
-                x: 55,
-                y: boxY + 45,
-                size: 8,
-                font: fontBold,
-                color: rgb(0.08, 0.18, 0.36)
-              });
-
-              const docVersion = getVersionFromFilename(node.name);
-              const areaName = doc?.area?.name || 'Gestión Documental';
-              const areaAbbr = getAreaAbbreviation(areaName);
-              const docCode = `ASEPSIS-${areaAbbr}-${node.id.split('-')[0].toUpperCase()}`;
-              const docEmitDate = new Date(node.createdAt).toLocaleDateString('es-PE', { timeZone: 'America/Lima' });
-
-              targetPage.drawText(`Documento: ${node.name}`, { x: 55, y: boxY + 28, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
-              targetPage.drawText(`Código: ${docCode}`, { x: 55, y: boxY + 12, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
-              targetPage.drawText(`Versión: ${docVersion}`, { x: 300, y: boxY + 28, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
-              targetPage.drawText(`Fecha Emisión: ${docEmitDate}`, { x: 300, y: boxY + 12, size: 7.5, font: fontRegular, color: rgb(0.1, 0.1, 0.1) });
-
-              // Guide text
-              targetPage.drawText("Las firmas estampadas a continuación certifican la revisión y aprobación formal del presente documento:", {
-                x: 45,
-                y: height - 200,
-                size: 8,
-                font: fontRegular,
-                color: rgb(0.3, 0.3, 0.3)
-              });
-            } else {
-              // Retrieve already appended signature page (the last page)
-              const updatedPages = pdfDoc.getPages();
-              targetPage = updatedPages[updatedPages.length - 1];
-              const size = targetPage.getSize();
-              width = size.width;
-              height = size.height;
+            const allPages = pdfDoc.getPages();
+            let pageIndex = allPages.length - 1; // Default to last page
+            if (placement.page === 'first') {
+              pageIndex = 0;
+            } else if (placement.page === 'number') {
+              pageIndex = Math.min(Math.max(0, (placement.pageNumber || 1) - 1), allPages.length - 1);
             }
 
-            // Find active verifier's signature buffer
-            let activeSigBuffer = null;
-            let activeSigPath = null;
-            let isV1 = false;
-            let isV2 = false;
-            let isV3 = false;
+            let targetPage = allPages[pageIndex];
+            const size = targetPage.getSize();
+            let width = size.width;
+            let height = size.height;
 
-            if (updateData.verifier1) {
-              activeSigBuffer = verifier1SigBuffer;
-              activeSigPath = verifier1Detail?.signature;
-              isV1 = true;
-            } else if (updateData.verifier2) {
-              activeSigBuffer = verifier2SigBuffer;
-              activeSigPath = verifier2Detail?.signature;
-              isV2 = true;
-            } else if (updateData.verifier3) {
-              activeSigBuffer = verifier3SigBuffer;
-              activeSigPath = verifier3Detail?.signature;
-              isV3 = true;
-            }
+            // Get active verifier's signature buffer (from current logged-in user)
+            const activeSigBuffer = user.signature ? await getSignatureBuffer(user.signature) : null;
+            const activeSigPath = user.signature;
 
             // Populate coordinates dynamically for database logging and certificate tracking
-            pageSigned = pdfDoc.getPages().length;
+            pageSigned = pageIndex + 1;
 
             if (activeSigBuffer) {
               try {
@@ -994,12 +896,13 @@ export async function POST(request: NextRequest) {
                   const boxW = 144;
                   const boxH = 99;
 
-                  // Determine symmetric x position based on the verifier slot
-                  let boxX = 45;
-                  if (isV2) boxX = 225;
-                  if (isV3) boxX = 405;
+                  // Place signature exactly at user's selected x & y percentages from the screen
+                  let boxX = (placement.x / 100) * width - boxW / 2;
+                  let boxY = (placement.y / 100) * height - boxH / 2;
 
-                  const boxY = height - 340;
+                  // Keep the signature box fully within target page boundaries (clamp it)
+                  boxX = Math.max(10, Math.min(width - boxW - 10, boxX));
+                  boxY = Math.max(10, Math.min(height - boxH - 10, boxY));
 
                   coordX = (boxX + boxW / 2) / width * 100;
                   coordY = (boxY + boxH / 2) / height * 100;

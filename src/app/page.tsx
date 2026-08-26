@@ -404,6 +404,7 @@ export default function Dashboard() {
     canSign: boolean;
     canTrash: boolean;
     isApproved: boolean;
+    hasUserSigned: boolean;
   }>({
     isOpen: false,
     id: '',
@@ -421,7 +422,8 @@ export default function Dashboard() {
     verifier3Signature: null,
     canSign: false,
     canTrash: false,
-    isApproved: false
+    isApproved: false,
+    hasUserSigned: false
   });
 
   // Profile modal states
@@ -779,6 +781,27 @@ export default function Dashboard() {
     return true;
   };
 
+  // Helper: Check if current user has already signed the file
+  const hasUserSigned = (item: ItemNode) => {
+    if (!user || item.type !== 'FILE') return false;
+    
+    // Get the document record
+    const doc = (item as any).document;
+    if (!doc) {
+      // Fallback for legacy files: use old verifiers logic
+      const userNormalized = user.name?.trim().toLowerCase();
+      return (
+        item.verifier1?.trim().toLowerCase() === userNormalized || 
+        item.verifier2?.trim().toLowerCase() === userNormalized || 
+        item.verifier3?.trim().toLowerCase() === userNormalized
+      );
+    }
+    
+    // Check if the current user has an APPROVED signature on this document
+    const mySig = doc.signatures?.find((s: any) => s.userId === user.id);
+    return mySig && mySig.status === 'APROBADO';
+  };
+
   // Double click file/folder action
   const handleItemDoubleClick = (item: ItemNode) => {
     if (item.type === 'FOLDER') {
@@ -805,7 +828,8 @@ export default function Dashboard() {
         canTrash: !item.isTrashed && user !== null && (item.creator === user.name || user.role === 'ADMIN'),
         isApproved: item.document
           ? item.document.status === 'APROBADO'
-          : (!!item.verifier1 && !!item.verifier2 && !!item.verifier3)
+          : (!!item.verifier1 && !!item.verifier2 && !!item.verifier3),
+        hasUserSigned: hasUserSigned(item)
       });
     }
   };
@@ -972,7 +996,8 @@ export default function Dashboard() {
           verifier2Signature: isV2 ? user?.signature : prev.verifier2Signature,
           verifier3Signature: isV3 ? user?.signature : prev.verifier3Signature,
           canSign: false, // Once signed, they cannot sign again!
-          isApproved: isApprovedNow
+          isApproved: isApprovedNow,
+          hasUserSigned: true
         }));
       }
     } catch (err) {
@@ -2459,6 +2484,7 @@ export default function Dashboard() {
         verifier3Signature={previewFile.verifier3Signature}
         canSign={previewFile.canSign}
         isApproved={previewFile.isApproved}
+        hasUserSigned={previewFile.hasUserSigned}
         currentUserName={user?.name}
         currentUserSignature={user?.signature}
         onVerify={(placement, annotations) => {
@@ -2490,7 +2516,8 @@ export default function Dashboard() {
               verifier2: data.node.verifier2,
               verifier3: data.node.verifier3,
               canSign: true, // Allow signing again
-              isApproved: false
+              isApproved: false,
+              hasUserSigned: false
             }));
           } catch (err) {
             console.error('Error al remover firma:', err);

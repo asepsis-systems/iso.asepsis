@@ -51,6 +51,7 @@ interface FilePreviewProps {
   verifier2Signature?: string | null;
   verifier3Signature?: string | null;
   canSign?: boolean;
+  hasUserSigned?: boolean;
   onVerify?: (placement?: { page: string; pageNumber?: number; x: number; y: number; signatureType?: string }, annotations?: Annotation[]) => void;
   onRemoveVerify?: () => void;
   onReject?: () => void;
@@ -760,6 +761,7 @@ export default function FilePreview({
   verifier2Signature,
   verifier3Signature,
   canSign = false,
+  hasUserSigned: hasUserSignedProp,
   onVerify,
   onRemoveVerify,
   onReject,
@@ -786,10 +788,13 @@ export default function FilePreview({
   const isNextSlotV1 = canSign && !verifier1;
   const isNextSlotV2 = canSign && verifier1 && !verifier2;
   const userNormalized = currentUserName?.trim().toLowerCase();
-  const hasUserSigned = 
-    (verifier1?.trim().toLowerCase() === userNormalized) ||
-    (verifier2?.trim().toLowerCase() === userNormalized) ||
-    (verifier3?.trim().toLowerCase() === userNormalized);
+  const hasUserSigned = hasUserSignedProp !== undefined
+    ? hasUserSignedProp
+    : (
+      (verifier1?.trim().toLowerCase() === userNormalized) ||
+      (verifier2?.trim().toLowerCase() === userNormalized) ||
+      (verifier3?.trim().toLowerCase() === userNormalized)
+    );
 
   const [isPlacingSignature, setIsPlacingSignature] = useState(false);
   const [placementPage, setPlacementPage] = useState<'last' | 'first' | 'number'>('last');

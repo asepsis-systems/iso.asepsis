@@ -188,11 +188,13 @@ async function appendValidationPage(
     verifierOrderMap.set(v.userId, v.signOrder);
   });
   
-  const sortedSignatures = [...(signatures || [])].sort((a, b) => {
-    const orderA = verifierOrderMap.get(a.userId) || 99;
-    const orderB = verifierOrderMap.get(b.userId) || 99;
-    return orderA - orderB;
-  });
+  const sortedSignatures = [...(signatures || [])]
+    .filter((sig: any) => sig.status === 'APROBADO')
+    .sort((a, b) => {
+      const orderA = verifierOrderMap.get(a.userId) || 99;
+      const orderB = verifierOrderMap.get(b.userId) || 99;
+      return orderA - orderB;
+    });
   
   const cardH = 100;
   for (const sig of sortedSignatures) {
@@ -680,7 +682,8 @@ export async function POST(request: NextRequest) {
       const verifierConf = doc.area.verifiers.find(v => v.userId === user.id);
       myOrder = verifierConf ? verifierConf.signOrder : 99;
 
-      // Enforce sequential signature order
+      // BYPASSED: Permitir que cualquier verificador firme en cualquier momento sin esperar el orden secuencial.
+      /*
       const previousVerifiers = doc.area.verifiers.filter(v => v.signOrder < myOrder);
       for (const prev of previousVerifiers) {
         const prevSig = doc.signatures.find(s => s.userId === prev.userId);
@@ -690,6 +693,7 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
       }
+      */
 
       // Assign to appropriate verifier slot
       if (myOrder === 1) {

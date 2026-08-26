@@ -228,11 +228,13 @@ async function appendCertificatePages(
   const verifiers = doc?.area?.verifiers || [];
   const verifierOrderMap = new Map();
   verifiers.forEach((v: any) => { verifierOrderMap.set(v.userId, v.signOrder); });
-  const sortedSignatures = [...(doc?.signatures || [])].sort((a: any, b: any) => {
-    const oA = verifierOrderMap.get(a.userId) || 99;
-    const oB = verifierOrderMap.get(b.userId) || 99;
-    return oA - oB;
-  });
+  const sortedSignatures = [...(doc?.signatures || [])]
+    .filter((sig: any) => sig.status === 'APROBADO')
+    .sort((a: any, b: any) => {
+      const oA = verifierOrderMap.get(a.userId) || 99;
+      const oB = verifierOrderMap.get(b.userId) || 99;
+      return oA - oB;
+    });
 
   const cardH = 88;
   let currentPage = page1;

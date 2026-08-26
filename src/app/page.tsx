@@ -21,6 +21,7 @@ import {
   FileCheck,
   Users,
   Clock,
+  Calendar,
   UploadCloud,
   Menu,
   X,
@@ -79,6 +80,8 @@ export default function Dashboard() {
   const [currentParentId, setCurrentParentId] = useState<string | null>(null);
   const [currentFilter, setCurrentFilter] = useState<string>('all'); // 'all' | 'recent' | 'starred' | 'trash'
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [creatorPendingCount, setCreatorPendingCount] = useState<number>(0);
@@ -758,8 +761,10 @@ export default function Dashboard() {
     // Check if the current user already signed
     const mySig = doc.signatures?.find((s: any) => s.userId === user.id);
     if (mySig && mySig.status !== 'PENDIENTE') return false;
-    
+
     // Check if previous verifiers in the order have signed (status === 'APROBADO')
+    // BYPASSED: Permitir que cualquier verificador firme en cualquier momento sin esperar el orden secuencial.
+    /*
     const myOrder = myVerifier.signOrder;
     for (const v of docArea.verifiers || []) {
       if (v.signOrder < myOrder) {
@@ -769,6 +774,7 @@ export default function Dashboard() {
         }
       }
     }
+    */
     
     return true;
   };
@@ -1040,6 +1046,24 @@ export default function Dashboard() {
     );
   }
 
+  const filteredItems = items.filter(item => {
+    if (!startDate && !endDate) return true;
+    const itemDate = new Date(item.createdAt);
+    itemDate.setHours(0, 0, 0, 0);
+    
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      if (itemDate < start) return false;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(0, 0, 0, 0);
+      if (itemDate > end) return false;
+    }
+    return true;
+  });
+
   return (
     <div 
       className="h-full flex overflow-hidden bg-slate-50/50"
@@ -1282,6 +1306,53 @@ export default function Dashboard() {
                   </button>
                 </React.Fragment>
               ))}
+            </div>
+          )}
+
+          {/* Date Picker Filter Row */}
+          {currentFilter !== 'users' && currentFilter !== 'audit' && (
+            <div className="mb-6 p-4 bg-white/65 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-4 animate-fade-in">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-brand-50 flex items-center justify-center text-brand-500 border border-brand-100 shrink-0">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">Filtrar por Fecha de Creación</h4>
+                  <p className="text-[10px] text-slate-400 font-medium">Filtra los documentos subidos por rango de fechas</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3.5 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Desde:</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hasta:</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
+                  />
+                </div>
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-600 rounded-xl text-[11px] font-bold transition-all active:scale-95 duration-150 border border-slate-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Limpiar</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -1548,12 +1619,22 @@ export default function Dashboard() {
                 Suelta un archivo aquí para cargarlo o utiliza los botones de la barra lateral para comenzar.
               </p>
             </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="h-[50vh] rounded-3xl border border-dashed border-slate-200/80 bg-white/40 backdrop-blur-xs flex flex-col items-center justify-center p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4 shadow-inner">
+                <Calendar className="w-7 h-7" />
+              </div>
+              <h3 className="font-bold text-slate-700 text-sm">Sin resultados de búsqueda</h3>
+              <p className="text-xs text-slate-400 max-w-xs mt-1">
+                Ningún elemento coincide con los filtros de fecha seleccionados en este rango.
+              </p>
+            </div>
           ) : (
             
             /* VIEW MODE: GRID (Cuadrícula) */
             viewMode === 'grid' ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-5">
-                {items.map((item) => (
+                {filteredItems.map((item) => (
                   <div
                     key={item.id}
                     draggable
@@ -1819,7 +1900,7 @@ export default function Dashboard() {
                             </tr>
                           </thead>
                           <tbody>
-                            {items.map((item, index) => (
+                            {filteredItems.map((item, index) => (
                               <tr 
                                 key={item.id}
                                 draggable
@@ -2050,7 +2131,7 @@ export default function Dashboard() {
                         <span>Tipo</span>
                         <span>Nombre</span>
                       </div>
-                      {items.map((item) => (
+                      {filteredItems.map((item) => (
                         <div
                           key={item.id}
                           onClick={() => handleItemDoubleClick(item)}

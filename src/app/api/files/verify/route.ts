@@ -503,127 +503,191 @@ export async function POST(request: NextRequest) {
 
     // Handle Signature Removal
     if (action === 'remove') {
-      let verifierSlotToRemove = 0;
-      if (node.verifier3?.trim().toLowerCase() === normalizedUser) {
-        verifierSlotToRemove = 3;
-      } else if (node.verifier2?.trim().toLowerCase() === normalizedUser) {
-        verifierSlotToRemove = 2;
-      } else if (node.verifier1?.trim().toLowerCase() === normalizedUser) {
-        verifierSlotToRemove = 1;
-      }
-
-      if (verifierSlotToRemove === 0) {
-        return NextResponse.json({ error: 'No has firmado este documento.' }, { status: 400 });
-      }
-
-      const backupFileName = `${diskFileName}.verifier${verifierSlotToRemove}-backup`;
       const uploadDir = path.join(process.cwd(), 'uploads');
-      const backupPath = path.join(uploadDir, backupFileName);
-      const filePath = path.join(uploadDir, diskFileName);
-
       let fileRestored = false;
       let newSize = node.size;
-
-      if (supabase) {
-        const { data: backupData, error: downloadError } = await supabase.storage.from('files').download(backupFileName);
-        if (!downloadError && backupData) {
-          const buffer = Buffer.from(await backupData.arrayBuffer());
-          const { error: uploadError } = await supabase.storage.from('files').upload(diskFileName, buffer, {
-            upsert: true,
-            contentType: node.mimeType || 'application/octet-stream'
-          });
-          if (!uploadError) {
-            fileRestored = true;
-            newSize = buffer.length;
-          }
-        }
-      } else {
-        if (fs.existsSync(backupPath)) {
-          fs.copyFileSync(backupPath, filePath);
-          fileRestored = true;
-          newSize = fs.statSync(filePath).size;
-        }
-      }
-
-      const updateData: any = {
-        size: newSize
-      };
-
-      if (verifierSlotToRemove === 1) {
-        updateData.verifier1 = null;
-        updateData.verifier2 = null;
-        updateData.verifier3 = null;
-      } else if (verifierSlotToRemove === 2) {
-        updateData.verifier2 = null;
-        updateData.verifier3 = null;
-      } else if (verifierSlotToRemove === 3) {
-        updateData.verifier3 = null;
-      }
-
-      const deleteBackup = async (slot: number) => {
-        const name = `${diskFileName}.verifier${slot}-backup`;
-        if (supabase) {
-          await supabase.storage.from('files').remove([name]);
-        } else {
-          const pathName = path.join(uploadDir, name);
-          if (fs.existsSync(pathName)) {
-            fs.unlinkSync(pathName);
-          }
-        }
-      };
-
-      for (let s = verifierSlotToRemove; s <= 3; s++) {
-        try {
-          await deleteBackup(s);
-        } catch (err) {
-          console.error(`Error deleting backup verifier${s}:`, err);
-        }
-      }
+      const updateData: any = {};
 
       if (doc) {
-        // Sync with Signature table
-        const verifiersByOrder = doc.area.verifiers;
-        for (const v of verifiersByOrder) {
-          if (v.signOrder >= verifierSlotToRemove) {
-            const sig = doc.signatures.find(s => s.userId === v.userId);
-            if (sig) {
-              await db.signature.update({
-                where: { id: sig.id },
-                data: {
-                  status: 'PENDIENTE',
-                  signedAt: null
-                }
+        // Area Signature Flow Removal
+        // 1. Find the logged-in user's approved signature
+        const userSig = doc.signatures.find(s => s.userId === user.id && s.status === 'APROBADO');
+        if (!userSig) {
+          return NextResponse.json({ error: 'No has firmado este documento o tu firma no está aprobada.' }, { status: 400 });
+        }
+
+        // 2. Identify the backup file name. Try user-specific first, then fall back to slot-based backups
+        const possibleBackupNames = [
+          `${diskFileName}.user-${user.id}-backup`,
+          `${diskFileName}.verifier1-backup`,
+          `${diskFileName}.verifier2-backup`,
+          `${diskFileName}.verifier3-backup`
+        ];
+
+        let chosenBackupName = null;
+        if (supabase) {
+          for (const name of possibleBackupNames) {
+            const { data, error } = await supabase.storage.from('files').download(name);
+            if (!error && data) {
+              chosenBackupName = name;
+              const buffer = Buffer.from(await data.arrayBuffer());
+              const { error: uploadError } = await supabase.storage.from('files').upload(diskFileName, buffer, {
+                upsert: true,
+                contentType: node.mimeType || 'application/octet-stream'
               });
+              if (!uploadError) {
+                fileRestored = true;
+                newSize = buffer.length;
+                break;
+              }
+            }
+          }
+        } else {
+          for (const name of possibleBackupNames) {
+            const backupPath = path.join(uploadDir, name);
+            if (fs.existsSync(backupPath)) {
+              chosenBackupName = name;
+              fs.copyFileSync(backupPath, path.join(uploadDir, diskFileName));
+              fileRestored = true;
+              newSize = fs.statSync(path.join(uploadDir, diskFileName)).size;
+              break;
             }
           }
         }
 
-        // Update Document status
-        await db.document.update({
-          where: { id: doc.id },
+        // 3. Clear user-specific backup if it was found
+        if (chosenBackupName) {
+          try {
+            if (supabase) {
+              await supabase.storage.from('files').remove([chosenBackupName]);
+            } else {
+              const bp = path.join(uploadDir, chosenBackupName);
+              if (fs.existsSync(bp)) fs.unlinkSync(bp);
+            }
+          } catch (err) {
+            console.error('Error deleting backup file:', err);
+          }
+        }
+
+        // 4. Reset matching verifier slot on Node (verifier1/2/3) if the name matches
+        if (node.verifier1 === user.name) {
+          updateData.verifier1 = null;
+        } else if (node.verifier2 === user.name) {
+          updateData.verifier2 = null;
+        } else if (node.verifier3 === user.name) {
+          updateData.verifier3 = null;
+        }
+
+        // 5. Update individual signature record to PENDIENTE
+        await db.signature.update({
+          where: { id: userSig.id },
           data: {
-            status: verifierSlotToRemove === 1 ? 'PENDIENTE' : 'EN_PROCESO'
+            status: 'PENDIENTE',
+            signedAt: null
           }
         });
 
-        // Audit Log
-        let fileHash = '';
-        try {
-          let fileBuffer: Buffer | null = null;
-          if (supabase) {
-            const { data } = await supabase.storage.from('files').download(diskFileName);
-            if (data) fileBuffer = Buffer.from(await data.arrayBuffer());
-          } else {
-            const filePath = path.join(process.cwd(), 'uploads', diskFileName);
-            if (fs.existsSync(filePath)) fileBuffer = fs.readFileSync(filePath);
+        // 6. Update document status to EN_PROCESO
+        await db.document.update({
+          where: { id: doc.id },
+          data: {
+            status: 'EN_PROCESO'
           }
-          if (fileBuffer) {
-            fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-          }
-        } catch (err) {
-          console.error('Error computing hash for remove audit:', err);
+        });
+
+      } else {
+        // Legacy Slot-based Flow Removal
+        let verifierSlotToRemove = 0;
+        if (node.verifier3?.trim().toLowerCase() === normalizedUser) {
+          verifierSlotToRemove = 3;
+        } else if (node.verifier2?.trim().toLowerCase() === normalizedUser) {
+          verifierSlotToRemove = 2;
+        } else if (node.verifier1?.trim().toLowerCase() === normalizedUser) {
+          verifierSlotToRemove = 1;
         }
 
+        if (verifierSlotToRemove === 0) {
+          return NextResponse.json({ error: 'No has firmado este documento.' }, { status: 400 });
+        }
+
+        const backupFileName = `${diskFileName}.verifier${verifierSlotToRemove}-backup`;
+        const backupPath = path.join(uploadDir, backupFileName);
+        const filePath = path.join(uploadDir, diskFileName);
+
+        if (supabase) {
+          const { data: backupData, error: downloadError } = await supabase.storage.from('files').download(backupFileName);
+          if (!downloadError && backupData) {
+            const buffer = Buffer.from(await backupData.arrayBuffer());
+            const { error: uploadError } = await supabase.storage.from('files').upload(diskFileName, buffer, {
+              upsert: true,
+              contentType: node.mimeType || 'application/octet-stream'
+            });
+            if (!uploadError) {
+              fileRestored = true;
+              newSize = buffer.length;
+            }
+          }
+        } else {
+          if (fs.existsSync(backupPath)) {
+            fs.copyFileSync(backupPath, filePath);
+            fileRestored = true;
+            newSize = fs.statSync(filePath).size;
+          }
+        }
+
+        if (verifierSlotToRemove === 1) {
+          updateData.verifier1 = null;
+          updateData.verifier2 = null;
+          updateData.verifier3 = null;
+        } else if (verifierSlotToRemove === 2) {
+          updateData.verifier2 = null;
+          updateData.verifier3 = null;
+        } else if (verifierSlotToRemove === 3) {
+          updateData.verifier3 = null;
+        }
+
+        const deleteBackup = async (slot: number) => {
+          const name = `${diskFileName}.verifier${slot}-backup`;
+          if (supabase) {
+            await supabase.storage.from('files').remove([name]);
+          } else {
+            const pathName = path.join(uploadDir, name);
+            if (fs.existsSync(pathName)) {
+              fs.unlinkSync(pathName);
+            }
+          }
+        };
+
+        for (let s = verifierSlotToRemove; s <= 3; s++) {
+          try {
+            await deleteBackup(s);
+          } catch (err) {
+            console.error(`Error deleting backup verifier${s}:`, err);
+          }
+        }
+      }
+
+      updateData.size = newSize;
+
+      // 5. Audit Log
+      let fileHash = '';
+      try {
+        let fileBuffer: Buffer | null = null;
+        if (supabase) {
+          const { data } = await supabase.storage.from('files').download(diskFileName);
+          if (data) fileBuffer = Buffer.from(await data.arrayBuffer());
+        } else {
+          const filePath = path.join(process.cwd(), 'uploads', diskFileName);
+          if (fs.existsSync(filePath)) fileBuffer = fs.readFileSync(filePath);
+        }
+        if (fileBuffer) {
+          fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+        }
+      } catch (err) {
+        console.error('Error computing hash for remove audit:', err);
+      }
+
+      if (doc) {
         await db.audit.create({
           data: {
             username: user.username,
@@ -633,7 +697,22 @@ export async function POST(request: NextRequest) {
               documentName: node.name,
               action: 'REMOVER_FIRMA',
               ip: clientIp,
-              status: verifierSlotToRemove === 1 ? 'PENDIENTE' : 'EN_PROCESO',
+              status: 'EN_PROCESO',
+              sha256: fileHash,
+              timestamp: new Date()
+            })
+          }
+        });
+      } else {
+        await db.audit.create({
+          data: {
+            username: user.username,
+            action: 'REMOVER_FIRMA',
+            detail: JSON.stringify({
+              message: `Removió su firma del documento "${node.name}"`,
+              documentName: node.name,
+              action: 'REMOVER_FIRMA',
+              ip: clientIp,
               sha256: fileHash,
               timestamp: new Date()
             })
@@ -819,15 +898,20 @@ export async function POST(request: NextRequest) {
       }
 
       // Create backup of the file before stamping
-      let verifierSlot = 1;
-      if (updateData.verifier1) {
-        verifierSlot = 1;
-      } else if (updateData.verifier2) {
-        verifierSlot = 2;
-      } else if (updateData.verifier3) {
-        verifierSlot = 3;
+      let backupFileName;
+      if (doc) {
+        backupFileName = `${diskFileName}.user-${user.id}-backup`;
+      } else {
+        let verifierSlot = 1;
+        if (updateData.verifier1) {
+          verifierSlot = 1;
+        } else if (updateData.verifier2) {
+          verifierSlot = 2;
+        } else if (updateData.verifier3) {
+          verifierSlot = 3;
+        }
+        backupFileName = `${diskFileName}.verifier${verifierSlot}-backup`;
       }
-      const backupFileName = `${diskFileName}.verifier${verifierSlot}-backup`;
       if (supabase) {
         const { error: uploadError } = await supabase.storage.from('files').upload(backupFileName, fileBuffer, {
           upsert: true,

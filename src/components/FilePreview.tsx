@@ -894,6 +894,51 @@ export default function FilePreview({
   const handleSignClick = () => {
     setIsPlacingSignature(true);
   };
+
+  const handleConfirmSignature = async () => {
+    const isNoStamp = sigTab === 'no_stamp' || selectedSignatureUrl === 'no_stamp';
+    if (activeTool === 'signature' && !isNoStamp && !selectedSignatureUrl) {
+      alert("No se ha seleccionado ninguna firma.");
+      return;
+    }
+
+    // Auto-save the selected signature (Signature, Initials or Visto Bueno) in the profile in background
+    if (activeTool === 'signature' && !isNoStamp && selectedSignatureUrl && selectedSignatureUrl !== 'no_stamp') {
+      try {
+        const saveRes = await fetch('/api/users/signature', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signatureBase64: selectedSignatureUrl })
+        });
+        if (!saveRes.ok) {
+          console.error('Failed to auto-save selected signature to profile');
+        }
+      } catch (e) {
+        console.error('Error auto-saving signature:', e);
+      }
+    }
+
+    setIsPlacingSignature(false);
+    if (onVerify) {
+      if (isPDF) {
+        onVerify(
+          activeTool === 'signature' && !isNoStamp
+            ? {
+                page: placementPage,
+                pageNumber: placementPage === 'number' ? placementPageNumber : undefined,
+                x: posX,
+                y: 100 - posY,
+                signatureType: sigTab
+              } 
+            : undefined,
+          annotations
+        );
+      } else {
+        onVerify();
+      }
+    }
+  };
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1083,6 +1128,17 @@ export default function FilePreview({
               >
                 <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span>{isPlacingSignature ? "Ocultar" : "Anotar / Firmar"}</span>
+              </button>
+            )}
+
+            {canSign && onVerify && isPlacingSignature && (
+              <button
+                onClick={handleConfirmSignature}
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[10px] sm:text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1 sm:gap-1.5 active:scale-95 animate-pulse"
+                title="Plasmar mi firma en la posición seleccionada"
+              >
+                <FileCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Firmar</span>
               </button>
             )}
 
@@ -1659,49 +1715,7 @@ export default function FilePreview({
                   {canSign && (
                     <button 
                       type="button"
-                      onClick={async () => {
-                        const isNoStamp = sigTab === 'no_stamp' || selectedSignatureUrl === 'no_stamp';
-                        if (activeTool === 'signature' && !isNoStamp && !selectedSignatureUrl) {
-                          alert("No se ha seleccionado ninguna firma.");
-                          return;
-                        }
-
-                        // Auto-save the selected signature (Signature, Initials or Visto Bueno) in the profile in background
-                        if (activeTool === 'signature' && !isNoStamp && selectedSignatureUrl && selectedSignatureUrl !== 'no_stamp') {
-                          try {
-                            const saveRes = await fetch('/api/users/signature', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ signatureBase64: selectedSignatureUrl })
-                            });
-                            if (!saveRes.ok) {
-                              console.error('Failed to auto-save selected signature to profile');
-                            }
-                          } catch (e) {
-                            console.error('Error auto-saving signature:', e);
-                          }
-                        }
-
-                        setIsPlacingSignature(false);
-                        if (onVerify) {
-                          if (isPDF) {
-                            onVerify(
-                              activeTool === 'signature' && !isNoStamp
-                                ? {
-                                    page: placementPage,
-                                    pageNumber: placementPage === 'number' ? placementPageNumber : undefined,
-                                    x: posX,
-                                    y: 100 - posY,
-                                    signatureType: sigTab
-                                  } 
-                                : undefined,
-                              annotations
-                            );
-                          } else {
-                            onVerify();
-                          }
-                        }
-                      }}
+                      onClick={handleConfirmSignature}
                       className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95"
                     >
                       {activeTool === 'signature' 

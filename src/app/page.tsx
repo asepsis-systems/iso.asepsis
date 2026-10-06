@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -1793,7 +1793,7 @@ export default function Dashboard() {
                                 className="w-full text-left px-4 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2"
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-slate-400" />
-                                <span>Editar Detalles</span>
+                                <span>Editar Verificadores</span>
                               </button>
                               {item.type === 'FOLDER' && item.areaFolder && user?.role === 'ADMIN' && (
                                 <button
@@ -2378,11 +2378,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* MODAL: Editar Detalles (Creador / Verificadores) */}
+      {/* MODAL: Editar Verificadores (Creador / Verificadores) */}
       {isDetailsModalOpen && (
         <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-6 w-full max-w-md">
-            <h3 className="font-bold text-slate-800 text-base mb-4">Editar Detalles de Control</h3>
+            <h3 className="font-bold text-slate-800 text-base mb-4">Verificadores: Documento</h3>
             <form onSubmit={handleDetailsSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Creador</label>
@@ -2407,37 +2407,17 @@ export default function Dashboard() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Verificador 1 (Solo lectura)</label>
-                <input
-                  type="text"
-                  value={detailsVerifier1}
-                  disabled
-                  placeholder="Sin firma (firmar desde el flujo oficial)"
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 text-sm cursor-not-allowed"
-                />
+                <label className="block text-xs font-bold text-slate-500 mb-1">Firmante 1 (Primer Verificador)</label>
+                <select value={detailsVerifier1} onChange={(e) => setDetailsVerifier1(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"> <option value="">-- Seleccionar Usuario --</option> {usersList.map((u) => ( <option key={u.id} value={u.name}> {u.name} ({u.role === "ADMIN" ? "Admin" : u.role === "VERIFIER" ? "Verificador" : "Creador"}) </option> ))} </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Verificador 2 (Solo lectura)</label>
-                <input
-                  type="text"
-                  value={detailsVerifier2}
-                  disabled
-                  placeholder="Sin firma (firmar desde el flujo oficial)"
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 text-sm cursor-not-allowed"
-                />
+                <label className="block text-xs font-bold text-slate-500 mb-1">Firmante 2 (Segundo Verificador)</label>
+                <select value={detailsVerifier2} onChange={(e) => setDetailsVerifier2(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"> <option value="">-- Seleccionar Usuario --</option> {usersList.map((u) => ( <option key={u.id} value={u.name}> {u.name} ({u.role === "ADMIN" ? "Admin" : u.role === "VERIFIER" ? "Verificador" : "Creador"}) </option> ))} </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Verificador 3 (Solo lectura)</label>
-                <input
-                  type="text"
-                  value={detailsVerifier3}
-                  disabled
-                  placeholder="Sin firma (firmar desde el flujo oficial)"
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 text-sm cursor-not-allowed"
-                />
-                <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
-                  * Las firmas de verificación son oficiales y solo se pueden registrar haciendo clic en el botón "Firmar / Verificar" del documento.
-                </p>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Firmante 3 (Último Aprobador)</label>
+                <select value={detailsVerifier3} onChange={(e) => setDetailsVerifier3(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-sm bg-white"> <option value="">-- Seleccionar Usuario --</option> {usersList.map((u) => ( <option key={u.id} value={u.name}> {u.name} ({u.role === "ADMIN" ? "Admin" : u.role === "VERIFIER" ? "Verificador" : "Creador"}) </option> ))} </select>
+                
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -3114,3 +3094,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
+

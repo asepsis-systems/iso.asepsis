@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 import { verifyToken } from '@/lib/auth-helpers';
@@ -547,7 +547,9 @@ export async function PUT(request: NextRequest) {
       updateData.parentId = (parentId === 'root' || parentId === '') ? null : parentId;
     }
 
-    const updatedNode = await db.node.update({
+    if ((verifier1 !== undefined || verifier2 !== undefined || verifier3 !== undefined) && currentUser.role !== 'ADMIN') { return NextResponse.json({ error: 'Solo el administrador puede editar los verificadores.' }, { status: 403 }); }
+
+      const updatedNode = await db.node.update({
       where: { id },
       data: updateData,
     });
